@@ -41,6 +41,18 @@ and `event_ts`. Remaining model fields are defaulted to: `currency="USD"`,
 `distance_from_home_km=0.0`, `geo_mismatch=0`, `is_new_device=0`, `is_new_ip=0`,
 `drift_phase=0`. Full-payload mode expects all model features in the request.
 
+## Redis (Docker)
+
+Feast online features require Redis. Use Docker Desktop instead of Homebrew:
+```bash
+docker run -d --name feast-redis -p 6379:6379 redis:7
+```
+To stop/remove:
+```bash
+docker stop feast-redis
+docker rm feast-redis
+```
+
 ## Offline training with Feast
 
 Offline training uses Feast historical features for the synthetic dataset and does **not**
