@@ -56,3 +56,8 @@ curl -X POST http://localhost:8080/score \
 Metrics: `http://localhost:8080/metrics`
 
 Demo UI: `http://localhost:8080/ui`
+
+## Canary / Shadow router (optional)
+```bash
+docker compose -f ops/docker-compose.yml up --build router serving-v1 serving-v2
+```

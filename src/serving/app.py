@@ -22,6 +22,7 @@ from src.serving.model_loader import load_models
 from src.serving.scorer import score_event
 
 LOG_FULL_PAYLOAD = os.getenv("LOG_FULL_PAYLOAD", "false").lower() == "true"
+MODEL_VERSION = os.getenv("MODEL_VERSION", "v1")
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 UI_ROOT = os.path.join(os.path.dirname(__file__), "ui")
@@ -129,6 +130,7 @@ def score(event: TransactionEvent):
         "registry_mode": models.metadata.get("registry_mode"),
         "champion_ref": (models.metadata.get("champion_uri") or "")[:40],
     }
+    response["served_by"] = MODEL_VERSION
     response["feature_snapshot"] = features
     response["feast_failed"] = feast_failed
 
@@ -145,6 +147,7 @@ def score(event: TransactionEvent):
             "scores": response.get("scores"),
             "fallbacks": [key for key, value in response.get("fallbacks", {}).items() if value],
             "latency_ms": response.get("latency_ms", {}).get("total"),
+            "served_by": response.get("served_by"),
         }
     )
     LATENCY.labels(endpoint="/score").observe(time.perf_counter() - start)
@@ -163,6 +166,7 @@ def health():
             "champion_ref": (models.metadata.get("champion_uri") or "")[:40],
         },
         "feast": {"ok": feast_ok, "error": feast_error},
+        "served_by": MODEL_VERSION,
     }
 
 
@@ -195,6 +199,7 @@ def stats():
     return {
         "service": "fraud-poc",
         "time_utc": datetime.now(timezone.utc).isoformat(),
+        "served_by": MODEL_VERSION,
         "models": {
             "rules": True,
             "champion_loaded": models.champion_model is not None,

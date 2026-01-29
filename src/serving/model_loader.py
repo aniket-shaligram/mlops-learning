@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -73,13 +74,18 @@ def _load_mlflow_model(model_uri: str) -> Optional[Any]:
 def load_models() -> ModelBundle:
     rules_model = RulesModel()
 
-    anomaly_path = Path("artifacts_phase4") / "anomaly" / "model.pkl"
+    bundle_path = os.getenv("MODEL_BUNDLE_PATH")
+    bundle_root = Path(bundle_path) if bundle_path else None
+
+    anomaly_path = (
+        bundle_root / "anomaly" / "model.pkl" if bundle_root else Path("artifacts_phase4") / "anomaly" / "model.pkl"
+    )
     anomaly_model = _load_joblib(anomaly_path)
     if anomaly_model is None:
         anomaly_model = AnomalyModel()
 
-    champion_info = _read_json(Path("artifacts_phase4") / "champion.json") or {}
-    registry_info = _read_json(Path("artifacts_phase4") / "registry_result.json") or {}
+    champion_info = _read_json((bundle_root / "champion.json") if bundle_root else Path("artifacts_phase4") / "champion.json") or {}
+    registry_info = _read_json((bundle_root / "registry_result.json") if bundle_root else Path("artifacts_phase4") / "registry_result.json") or {}
 
     champion_type = champion_info.get("model_type")
     champion_uri = champion_info.get("model_uri")
@@ -90,7 +96,12 @@ def load_models() -> ModelBundle:
     if champion_uri:
         champion_model = _load_mlflow_model(champion_uri)
     if champion_model is None and champion_type:
-        local_path = _resolve_local_champion_path(champion_type, registered_model_name)
+        if bundle_root:
+            local_path = bundle_root / champion_type / "model.pkl"
+            if not local_path.exists():
+                local_path = _resolve_local_champion_path(champion_type, registered_model_name)
+        else:
+            local_path = _resolve_local_champion_path(champion_type, registered_model_name)
         champion_model = _load_joblib(local_path) if local_path else None
 
     metadata = {

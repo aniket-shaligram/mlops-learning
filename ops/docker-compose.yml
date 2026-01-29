@@ -27,5 +27,63 @@ services:
     ports:
       - "6379:6379"
 
+  serving-v1:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      APP_MODULE: src.serving.app:app
+      MODEL_VERSION: v1
+      MODEL_BUNDLE_PATH: /app/artifacts_phase4
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: fraud_poc
+      POSTGRES_USER: fraud
+      POSTGRES_PASSWORD: fraud
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "8083:8080"
+
+  serving-v2:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      APP_MODULE: src.serving.app:app
+      MODEL_VERSION: v2
+      MODEL_BUNDLE_PATH: /app/artifacts_phase4_v2
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: fraud_poc
+      POSTGRES_USER: fraud
+      POSTGRES_PASSWORD: fraud
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "8084:8080"
+
+  router:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      APP_MODULE: src.router.app:app
+      ROUTER_MODE: shadow
+      CANARY_PERCENT: 10
+      V1_URL: http://serving-v1:8080/score
+      V2_URL: http://serving-v2:8080/score
+    depends_on:
+      - serving-v1
+      - serving-v2
+    ports:
+      - "8080:8080"
+
 volumes:
   pgdata:

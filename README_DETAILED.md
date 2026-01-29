@@ -242,3 +242,17 @@ Metrics: `http://localhost:8080/metrics`
 uvicorn src.serving.app:app --host 0.0.0.0 --port 8080 --reload
 ```
 Open `http://localhost:8080/ui` and use the form to score transactions.
+
+## Canary / Shadow Router
+
+Run two serving instances plus a router (ports: router 8080, v1 8083, v2 8084):
+```bash
+docker compose -f ops/docker-compose.yml up --build router serving-v1 serving-v2
+```
+
+Switch modes:
+- Shadow (default): `ROUTER_MODE=shadow` (router always returns v1)
+- Canary: `ROUTER_MODE=canary` with `CANARY_PERCENT=10`
+
+Open router UI: `http://localhost:8080/ui`
+Shadow comparisons: `http://localhost:8080/api/shadow-comparisons`
