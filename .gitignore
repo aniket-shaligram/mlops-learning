@@ -4,6 +4,7 @@ __pycache__/
 *.pyc
 
 artifacts/
+artifacts_phase4/
 artifacts_synth/
 data/
 feast_repo/data/
