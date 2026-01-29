@@ -7,3 +7,5 @@ lightgbm
 xgboost
 pyarrow
 feast[redis]
+pika
+psycopg2-binary

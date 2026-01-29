@@ -1,0 +1,118 @@
+from __future__ import annotations
+
+import argparse
+import json
+import time
+from pathlib import Path
+from typing import Iterable
+from uuid import uuid4
+
+import pandas as pd
+import pika
+
+EXCHANGE = "tx.events"
+ROUTING_KEY = "txn.created"
+
+
+def _load_dataframe(path: Path) -> pd.DataFrame:
+    if not path.exists():
+        raise FileNotFoundError(f"Dataset not found at {path}")
+    if path.suffix.lower() == ".parquet":
+        return pd.read_parquet(path)
+    return pd.read_csv(path)
+
+
+def _to_iso_utc(value: object) -> str:
+    ts = pd.to_datetime(value, utc=True, errors="coerce")
+    if pd.isna(ts):
+        raise ValueError(f"Invalid event_ts value: {value}")
+    return ts.isoformat().replace("+00:00", "Z")
+
+
+def _iter_rows(df: pd.DataFrame, max_events: int) -> Iterable[pd.Series]:
+    if max_events > 0:
+        df = df.head(max_events)
+    for _, row in df.iterrows():
+        yield row
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Publish synthetic transactions to RabbitMQ.")
+    parser.add_argument("--data_path", required=True, help="Path to parquet/csv dataset.")
+    parser.add_argument(
+        "--amqp_url",
+        default="amqp://guest:guest@localhost:5672/%2F",
+        help="AMQP connection URL.",
+    )
+    parser.add_argument("--rate", type=int, default=5000, help="Events per second.")
+    parser.add_argument("--max_events", type=int, default=0, help="Max events to send (0=all).")
+    args = parser.parse_args()
+
+    df = _load_dataframe(Path(args.data_path))
+    required = [
+        "event_ts",
+        "user_id",
+        "merchant_id",
+        "device_id",
+        "ip_id",
+        "amount",
+        "currency",
+        "country",
+        "channel",
+        "drift_phase",
+    ]
+    missing = [col for col in required if col not in df.columns]
+    if missing:
+        raise ValueError("Dataset is missing required columns: " + ", ".join(missing))
+
+    connection = pika.BlockingConnection(pika.URLParameters(args.amqp_url))
+    channel = connection.channel()
+    channel.exchange_declare(exchange=EXCHANGE, exchange_type="topic", durable=True)
+    channel.confirm_delivery()
+
+    interval = 1.0 / args.rate if args.rate > 0 else 0.0
+    sent = 0
+    last_time = time.monotonic()
+
+    for row in _iter_rows(df, args.max_events):
+        payload = {
+            "event_id": str(uuid4()),
+            "event_type": ROUTING_KEY,
+            "event_ts": _to_iso_utc(row["event_ts"]),
+            "user_id": int(row["user_id"]),
+            "merchant_id": int(row["merchant_id"]),
+            "device_id": int(row["device_id"]),
+            "ip_id": int(row["ip_id"]),
+            "amount": float(row["amount"]),
+            "currency": str(row["currency"]),
+            "country": str(row["country"]),
+            "channel": str(row["channel"]),
+            "drift_phase": int(row["drift_phase"]),
+        }
+        body = json.dumps(payload)
+        ok = channel.basic_publish(
+            exchange=EXCHANGE,
+            routing_key=ROUTING_KEY,
+            body=body,
+            properties=pika.BasicProperties(delivery_mode=2),
+        )
+        if not ok:
+            print("WARN: publish not confirmed")
+
+        sent += 1
+        if sent % 10_000 == 0:
+            print(f"published {sent} events")
+
+        if interval > 0:
+            elapsed = time.monotonic() - last_time
+            sleep_for = interval - elapsed
+            if sleep_for > 0:
+                time.sleep(sleep_for)
+            last_time = time.monotonic()
+
+    print(f"done publishing {sent} events")
+    connection.close()
+
+
+if __name__ == "__main__":
+    main()
