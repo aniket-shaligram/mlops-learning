@@ -1,6 +1,6 @@
-# Fraud Scoring Baseline (Credit Card Fraud Detection)
+# Fraud Scoring Baseline (Synthetic)
 
-Minimal, production-ish baseline for scoring fraud using the Kaggle **Credit Card Fraud Detection** dataset (`creditcard.csv` with columns `Time, V1..V28, Amount, Class`).  
+Minimal, production-ish baseline for scoring fraud using an interpretable synthetic dataset.
 It trains a model locally, saves artifacts, and scores a single transaction from JSON.
 
 ## Quickstart
@@ -9,13 +9,6 @@ It trains a model locally, saves artifacts, and scores a single transaction from
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-Place the dataset at `data/creditcard.csv`, then:
-
-```bash
-python src/train.py --data_path data/creditcard.csv
-python src/predict.py --input_json examples/one_txn.json
 ```
 
 ## Synthetic dataset generator
@@ -48,7 +41,7 @@ python src/predict.py --artifacts_dir artifacts_synth --input_json examples/one_
 
 ## What gets produced
 
-Artifacts are written to `./artifacts`:
+Artifacts are written to `./artifacts_synth`:
 - `model.pkl` — trained model
 - `features.json` — list of feature columns used for training
 - `metrics.json` — PR-AUC, ROC-AUC, precision/recall/F1, optimal threshold, and metadata
@@ -66,17 +59,17 @@ This keeps the full dataset while weighting fraud examples more heavily.
 
 Train:
 ```bash
-python src/train.py --data_path data/creditcard.csv --test_size 0.2 --random_seed 42 --model_type auto --artifacts_dir artifacts
+python src/train.py --data_path data/synth_transactions.parquet --dataset_type synth --test_size 0.2 --random_seed 42 --model_type auto --artifacts_dir artifacts_synth
 ```
 
 Predict:
 ```bash
-python src/predict.py --artifacts_dir artifacts --input_json examples/one_txn.json
+python src/predict.py --artifacts_dir artifacts_synth --input_json examples/one_txn.json
 ```
 
 If you want to override the decision threshold:
 ```bash
-python src/predict.py --artifacts_dir artifacts --input_json examples/one_txn.json --threshold 0.5
+python src/predict.py --artifacts_dir artifacts_synth --input_json examples/one_txn.json --threshold 0.5
 ```
 
 `--model_type` supports `auto`, `lightgbm`, `xgboost`, or `logreg` (auto prefers LightGBM).
