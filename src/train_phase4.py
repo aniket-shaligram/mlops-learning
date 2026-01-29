@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -16,6 +17,9 @@ from sklearn.metrics import average_precision_score, precision_recall_fscore_sup
 from sklearn.model_selection import train_test_split
 from sklearn.dummy import DummyClassifier
 
+repo_root = Path(__file__).resolve().parent.parent
+sys.path.append(str(repo_root))
+
 from feast_client import ENTITY_KEYS, FEAST_FEATURE_REFS
 from mlflow_utils import (
     log_artifacts_dir,
@@ -26,8 +30,8 @@ from mlflow_utils import (
     register_and_promote,
     start_run,
 )
-from models.anomaly_model import AnomalyModel
-from models.rules_model import RulesModel
+from src.models.anomaly_model import AnomalyModel
+from src.models.rules_model import RulesModel
 from utils import SYNTH_CATEGORICALS, encode_synth_features, ensure_dir, save_json
 
 

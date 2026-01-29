@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Any, Dict, Tuple
@@ -112,11 +113,15 @@ def score_event(
         fallbacks["rules_only"] = True
         final_score = rules_score
 
-    if final_score >= 0.90:
+    block_threshold = float(os.getenv("DECISION_BLOCK_THRESHOLD", "0.92"))
+    review_threshold = float(os.getenv("DECISION_REVIEW_THRESHOLD", "0.80"))
+    stepup_threshold = float(os.getenv("DECISION_STEPUP_THRESHOLD", "0.55"))
+
+    if final_score >= block_threshold:
         decision = "block"
-    elif final_score >= 0.70:
+    elif final_score >= review_threshold:
         decision = "review"
-    elif final_score >= 0.40:
+    elif final_score >= stepup_threshold:
         decision = "step_up"
     else:
         decision = "approve"

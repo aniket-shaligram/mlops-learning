@@ -5,6 +5,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import importlib
+import sys
+
 import joblib
 
 from src.models.anomaly_model import AnomalyModel
@@ -31,7 +34,17 @@ def _load_joblib(path: Path) -> Optional[Any]:
     try:
         return joblib.load(path)
     except ModuleNotFoundError:
-        return None
+        try:
+            sys.modules.setdefault("models", importlib.import_module("src.models"))
+            sys.modules.setdefault(
+                "models.anomaly_model", importlib.import_module("src.models.anomaly_model")
+            )
+            sys.modules.setdefault(
+                "models.rules_model", importlib.import_module("src.models.rules_model")
+            )
+            return joblib.load(path)
+        except Exception:
+            return None
 
 
 def _resolve_local_champion_path(
