@@ -1,8 +1,12 @@
 from datetime import timedelta
 
 
-from feast import Entity, FeatureView, Field
-from feast.data_source import FileSource
+from feast import Entity, FeatureService, FeatureView, Field
+
+try:
+    from feast.data_source import FileSource
+except ImportError:  # Feast >= 0.41
+    from feast import FileSource
 from feast.types import Float32, Int64
 from feast.value_type import ValueType
 
@@ -65,4 +69,9 @@ ip_features = FeatureView(
     ],
     online=True,
     source=TRANSACTIONS_SOURCE,
+)
+
+fraud_feature_service = FeatureService(
+    name="fraud_feature_service",
+    features=[user_features, merchant_features, device_features, ip_features],
 )

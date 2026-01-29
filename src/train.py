@@ -122,25 +122,40 @@ def main() -> None:
         choices=["kaggle", "synth"],
         help="Dataset schema to use.",
     )
+    parser.add_argument(
+        "--use_feast_offline",
+        choices=["true", "false"],
+        default="false",
+        help="Use Feast offline features for synth training.",
+    )
     parser.add_argument("--artifacts_dir", default="artifacts")
     args = parser.parse_args()
 
-    artifacts_dir = ensure_dir(args.artifacts_dir)
-    df = load_dataset(args.data_path)
-    feature_list, target_col, categorical_cols = get_dataset_config(args.dataset_type)
-    if args.dataset_type == "kaggle":
-        validate_columns(df)
-    else:
-        missing = [col for col in feature_list + [target_col] if col not in df.columns]
-        if missing:
-            raise ValueError(
-                "Dataset is missing required columns: "
-                + ", ".join(missing)
-                + ". Ensure the synthetic schema is used."
-            )
+    use_feast_offline = args.use_feast_offline.lower() == "true"
+    if args.dataset_type != "synth" and use_feast_offline:
+        raise ValueError("Feast offline features are only supported for synth.")
 
-    X_raw = df[feature_list]
-    y = df[target_col]
+    artifacts_dir = ensure_dir(args.artifacts_dir)
+    feature_list, target_col, categorical_cols = get_dataset_config(args.dataset_type)
+    if args.dataset_type == "synth" and use_feast_offline:
+        from feast_offline import build_offline_training_frame
+
+        X_raw, y = build_offline_training_frame(args.data_path)
+    else:
+        df = load_dataset(args.data_path)
+        if args.dataset_type == "kaggle":
+            validate_columns(df)
+        else:
+            missing = [col for col in feature_list + [target_col] if col not in df.columns]
+            if missing:
+                raise ValueError(
+                    "Dataset is missing required columns: "
+                    + ", ".join(missing)
+                    + ". Ensure the synthetic schema is used."
+                )
+
+        X_raw = df[feature_list]
+        y = df[target_col]
     if args.dataset_type == "synth" and categorical_cols:
         X = encode_synth_features(X_raw, categorical_cols)
     else:
