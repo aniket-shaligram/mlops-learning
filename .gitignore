@@ -9,3 +9,7 @@ data/
 feast_repo/data/
 mlflow.db
 mlruns/
+gx/uncommitted/
+gx/checkpoints/
+gx/plugins/
+gx/expectations/.ge_store_backend_id
