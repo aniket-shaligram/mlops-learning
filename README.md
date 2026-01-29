@@ -32,105 +32,12 @@ This writes:
 - `examples/one_txn.json` (sample input for prediction, includes entity IDs)
 - `data/synth_profiles/` (user/merchant/device/ip profiles)
 
-Train/predict on synthetic data (payload-only, no Feast):
-```bash
-python src/train.py --data_path data/synth_transactions.parquet --dataset_type synth --artifacts_dir artifacts_synth
-python src/predict.py --artifacts_dir artifacts_synth --input_json examples/one_txn.json --use_feast false
-```
-`--dataset_type synth` enables one-hot encoding for categorical fields (currency, country, channel).
+## Feast features
 
-## Feast online features (Phase 1)
-
-Phase 1 keeps training unchanged and uses Feast (Redis online store) at inference time.
-For now, **transaction context** fields stay in the request payload:
-`amount`, `hour_of_day`, `geo_mismatch`, `is_new_device`, `is_new_ip`, plus the categorical fields
-`currency`, `country`, `channel`, and the remaining model features such as
-`distance_from_home_km` and `drift_phase`.
-
-Start Redis:
-```bash
-docker run -p 6379:6379 redis
-```
-Or with Homebrew:
-```bash
-brew install redis
-brew services start redis
-```
-
-Generate synthetic dataset in Parquet:
-```bash
-python src/synth/generate_synth.py --rows 1000000 --format parquet
-```
-
-Apply Feast definitions:
-```bash
-cd feast_repo && feast apply
-```
-The registry is stored at `feast_repo/data/feast_registry.db` (ignored by git).
-
-Materialize to the online store (use a current UTC timestamp):
-```bash
-cd feast_repo
-feast materialize-incremental "$(date -u +"%Y-%m-%dT%H:%M:%S")"
-```
-Optional: materialize up to the latest event in the Parquet file:
-```bash
-python - <<'PY'
-import pandas as pd
-
-ts = pd.read_parquet("data/synth_transactions.parquet")["event_ts"].max()
-print(pd.to_datetime(ts, utc=True).strftime("%Y-%m-%dT%H:%M:%S"))
-PY
-```
-
-Run prediction with Feast:
-```bash
-python src/predict.py --artifacts_dir artifacts_synth --input_json examples/one_txn.json --dataset_type synth --use_feast true
-```
-Ids-only request mode (entity ids + minimal context in payload):
-```bash
-python src/predict.py --artifacts_dir artifacts_synth --input_json examples/one_txn.json --dataset_type synth --use_feast true --ids_only_request true
-```
-If you see a missing non-Feast context error, include those fields in the payload
-(e.g. `is_new_device`, `is_new_ip`, `geo_mismatch`, `distance_from_home_km`, `drift_phase`).
-
-### Generating ids-only example request
-
-`python src/synth/generate_synth.py` now also writes `examples/one_txn_ids_only.json`.
-
-```bash
-python src/predict.py \
-  --artifacts_dir artifacts_synth \
-  --input_json examples/one_txn_ids_only.json \
-  --dataset_type synth \
-  --use_feast true \
-  --ids_only_request true
-```
-
-Minimal validation:
-```bash
-cd feast_repo && feast entities list
-cd feast_repo && feast feature-views list
-```
-
-Quick online fetch check:
-```bash
-python - <<'PY'
-from feast import FeatureStore
-
-store = FeatureStore(repo_path="feast_repo")
-features = store.get_online_features(
-    features=[
-        "user_features:user_txn_count_5m",
-        "merchant_features:merchant_chargeback_rate_30d",
-        "device_features:device_risk_score",
-        "ip_features:ip_risk_score",
-    ],
-    entity_rows=[{"user_id": 1, "merchant_id": 1, "device_id": 1, "ip_id": 1}],
-).to_dict()
-print(features)
-PY
-```
+Training uses Feast offline historical features for the synthetic dataset. Inference
+fetches Feast features online; the request still includes transaction context fields
+(`amount`, `hour_of_day`, `geo_mismatch`, `is_new_device`, `is_new_ip`) and categorical
+fields (`currency`, `country`, `channel`).
 
 ## Offline training with Feast
 
@@ -139,7 +46,7 @@ require Redis.
 
 Generate a Parquet dataset:
 ```bash
-python src/synth/generate_synth.py --rows 1000000 --format parquet
+python src/synth/generate_synth.py --rows 10000 --format parquet
 ```
 
 Apply Feast definitions:
@@ -158,7 +65,7 @@ python src/train.py \
 
 ## What gets produced
 
-Artifacts are written to `./artifacts_synth`:
+Artifacts are written to `./artifacts_synth_feast`:
 - `model.pkl` — trained model
 - `features.json` — list of feature columns used for training
 - `metrics.json` — PR-AUC, ROC-AUC, precision/recall/F1, optimal threshold, and metadata
@@ -176,16 +83,12 @@ This keeps the full dataset while weighting fraud examples more heavily.
 
 Train:
 ```bash
-python src/train.py --data_path data/synth_transactions.parquet --dataset_type synth --test_size 0.2 --random_seed 42 --model_type auto --artifacts_dir artifacts_synth
+python src/train.py --data_path data/synth_transactions.parquet --dataset_type synth --use_feast_offline true --test_size 0.2 --random_seed 42 --model_type auto --artifacts_dir artifacts_synth_feast
 ```
 
 Predict:
 ```bash
-python src/predict.py --artifacts_dir artifacts_synth --input_json examples/one_txn.json --use_feast false
-```
-To use Feast at inference time:
-```bash
-python src/predict.py --artifacts_dir artifacts_synth --input_json examples/one_txn.json --dataset_type synth --use_feast true
+python src/predict.py --artifacts_dir artifacts_synth_feast --input_json examples/one_txn.json --dataset_type synth --use_feast true
 ```
 
 If you want to override the decision threshold:
