@@ -373,19 +373,6 @@ def main() -> None:
         txn_id_offset += rows_for_day
 
         if not sample_written:
-            sample_columns = [
-                "user_id",
-                "merchant_id",
-                "device_id",
-                "ip_id",
-                *SYNTH_FEATURES,
-            ]
-            sample = df_day[sample_columns].iloc[0].to_dict()
-            sample_path = Path("examples/one_txn.json")
-            sample_path.parent.mkdir(parents=True, exist_ok=True)
-            with sample_path.open("w", encoding="utf-8") as handle:
-                json.dump(sample, handle, indent=2)
-
             ids_only = df_day[
                 [
                     "user_id",

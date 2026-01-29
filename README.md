@@ -29,7 +29,6 @@ python src/synth/generate_synth.py --smoke_test --format csv
 
 This writes:
 - `data/synth_transactions.(csv|parquet)`
-- `examples/one_txn.json` (full-payload example, includes entity IDs)
 - `examples/one_txn_ids_only.json` (ids-only request example)
 - `data/synth_profiles/` (user/merchant/device/ip profiles)
 
