@@ -16,7 +16,14 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import train_test_split
 
-from utils import FEATURES, TARGET, ensure_dir, load_dataset, save_json, validate_columns
+from utils import (
+    ensure_dir,
+    encode_synth_features,
+    get_dataset_config,
+    load_dataset,
+    save_json,
+    validate_columns,
+)
 
 
 def _resolve_model(
@@ -109,15 +116,35 @@ def main() -> None:
         default="auto",
         choices=["auto", "lightgbm", "xgboost", "logreg"],
     )
+    parser.add_argument(
+        "--dataset_type",
+        default="kaggle",
+        choices=["kaggle", "synth"],
+        help="Dataset schema to use.",
+    )
     parser.add_argument("--artifacts_dir", default="artifacts")
     args = parser.parse_args()
 
     artifacts_dir = ensure_dir(args.artifacts_dir)
     df = load_dataset(args.data_path)
-    validate_columns(df)
+    feature_list, target_col, categorical_cols = get_dataset_config(args.dataset_type)
+    if args.dataset_type == "kaggle":
+        validate_columns(df)
+    else:
+        missing = [col for col in feature_list + [target_col] if col not in df.columns]
+        if missing:
+            raise ValueError(
+                "Dataset is missing required columns: "
+                + ", ".join(missing)
+                + ". Ensure the synthetic schema is used."
+            )
 
-    X = df[FEATURES]
-    y = df[TARGET]
+    X_raw = df[feature_list]
+    y = df[target_col]
+    if args.dataset_type == "synth" and categorical_cols:
+        X = encode_synth_features(X_raw, categorical_cols)
+    else:
+        X = X_raw
 
     X_train, X_test, y_train, y_test = train_test_split(
         X,
@@ -166,6 +193,7 @@ def main() -> None:
 
     metadata = {
         "model_type": resolved_type,
+        "dataset_type": args.dataset_type,
         "test_size": args.test_size,
         "random_seed": args.random_seed,
         "imbalance_strategy": imbalance_strategy,
@@ -175,15 +203,18 @@ def main() -> None:
         "train_fraud_count": positives,
         "train_legit_count": negatives,
     }
+    if categorical_cols:
+        metadata["categorical_cols"] = categorical_cols
 
     model_path = artifacts_dir / "model.pkl"
     joblib.dump(model, model_path)
-    save_json(artifacts_dir / "features.json", {"features": FEATURES})
+    save_json(artifacts_dir / "features.json", {"features": list(X.columns)})
     save_json(artifacts_dir / "metrics.json", {**metrics, **metadata})
     save_json(artifacts_dir / "run_config.json", metadata)
 
     params = {
         "model_type": resolved_type,
+        "dataset_type": args.dataset_type,
         "test_size": args.test_size,
         "random_seed": args.random_seed,
         "imbalance_strategy": imbalance_strategy,

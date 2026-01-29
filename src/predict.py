@@ -7,7 +7,7 @@ from typing import Any, Dict
 
 import joblib
 
-from utils import load_json, make_feature_frame
+from utils import encode_synth_features, get_dataset_config, load_json, make_feature_frame
 
 
 def main() -> None:
@@ -20,6 +20,7 @@ def main() -> None:
     artifacts_dir = Path(args.artifacts_dir)
     model_path = artifacts_dir / "model.pkl"
     features_path = artifacts_dir / "features.json"
+    run_config_path = artifacts_dir / "run_config.json"
 
     if not model_path.exists():
         raise FileNotFoundError(f"Model not found at {model_path}")
@@ -34,7 +35,20 @@ def main() -> None:
     if not feature_list:
         raise ValueError("Features list is empty in artifacts/features.json")
 
-    df = make_feature_frame(payload, feature_list).astype(float)
+    dataset_type = "kaggle"
+    categorical_cols = []
+    if run_config_path.exists():
+        run_config = load_json(run_config_path)
+        dataset_type = run_config.get("dataset_type", "kaggle")
+        categorical_cols = run_config.get("categorical_cols", [])
+
+    if dataset_type == "synth":
+        raw_features, _, synth_categoricals = get_dataset_config("synth")
+        categorical_cols = categorical_cols or synth_categoricals
+        df_raw = make_feature_frame(payload, raw_features)
+        df = encode_synth_features(df_raw, categorical_cols, feature_list).astype(float)
+    else:
+        df = make_feature_frame(payload, feature_list).astype(float)
     proba = float(model.predict_proba(df)[:, 1][0])
 
     threshold = args.threshold

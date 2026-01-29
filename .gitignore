@@ -4,6 +4,7 @@ __pycache__/
 *.pyc
 
 artifacts/
+artifacts_synth/
 data/
 mlflow.db
 mlruns/

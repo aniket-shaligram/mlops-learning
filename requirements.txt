@@ -5,3 +5,4 @@ joblib
 mlflow
 lightgbm
 xgboost
+pyarrow

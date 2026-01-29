@@ -18,6 +18,34 @@ python src/train.py --data_path data/creditcard.csv
 python src/predict.py --input_json examples/one_txn.json
 ```
 
+## Synthetic dataset generator
+
+Generate an interpretable fraud dataset (1M rows by default) with velocity features,
+new device/IP signals, geo mismatch, merchant risk, label delay, and drift.
+
+```bash
+python src/synth/generate_synth.py --rows 1000000 --format parquet
+```
+
+Parquet output requires `pyarrow` (included in `requirements.txt`).
+
+Smoke test (10k rows):
+```bash
+python src/synth/generate_synth.py --smoke_test --format csv
+```
+
+This writes:
+- `data/synth_transactions.(csv|parquet)`
+- `examples/one_txn.json` (sample input for prediction)
+- `data/synth_profiles/` (user/merchant/device/ip profiles)
+
+Train/predict on synthetic data:
+```bash
+python src/train.py --data_path data/synth_transactions.parquet --dataset_type synth --artifacts_dir artifacts_synth
+python src/predict.py --artifacts_dir artifacts_synth --input_json examples/one_txn.json
+```
+`--dataset_type synth` enables one-hot encoding for categorical fields (currency, country, channel).
+
 ## What gets produced
 
 Artifacts are written to `./artifacts`:
