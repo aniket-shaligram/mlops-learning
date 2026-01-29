@@ -55,10 +55,23 @@ def _ensure_event_timestamp(df: pd.DataFrame) -> pd.Series:
     return df["event_ts"]
 
 
+def _assert_postgres_offline_source(store: FeatureStore) -> None:
+    views = store.list_feature_views()
+    for view in views:
+        source = getattr(view, "batch_source", None) or getattr(view, "source", None)
+        if source and source.__class__.__name__.lower().startswith("postgres"):
+            return
+    raise ValueError(
+        "Feast feature views are not backed by PostgresSource. "
+        "Set FEAST_OFFLINE_SOURCE=postgres and run `cd feast_repo && feast apply`."
+    )
+
+
 def build_offline_training_frame(
     data_path: str,
     repo_path: str = "feast_repo",
     max_rows: int | None = None,
+    offline_source: str | None = None,
 ) -> Tuple[pd.DataFrame, pd.Series]:
     path = Path(data_path)
     base_columns = [
@@ -86,6 +99,8 @@ def build_offline_training_frame(
     entity_df["event_timestamp"] = event_ts
 
     store = FeatureStore(repo_path=repo_path)
+    if offline_source and offline_source.lower() in {"validated_db", "postgres", "validated"}:
+        _assert_postgres_offline_source(store)
     try:
         hist_df = store.get_historical_features(
             entity_df=entity_df,

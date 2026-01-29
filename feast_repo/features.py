@@ -1,5 +1,5 @@
 from datetime import timedelta
-
+import os
 
 from feast import Entity, FeatureService, FeatureView, Field
 
@@ -7,13 +7,82 @@ try:
     from feast.data_source import FileSource
 except ImportError:  # Feast >= 0.41
     from feast import FileSource
+try:
+    from feast.infra.offline_stores.contrib.postgres_offline_store.postgres_source import (
+        PostgresSource,
+    )
+except Exception:
+    try:
+        from feast import PostgresSource
+    except Exception:  # pragma: no cover - best effort fallback for older Feast
+        PostgresSource = None
 from feast.types import Float32, Int64
 from feast.value_type import ValueType
 
-TRANSACTIONS_SOURCE = FileSource(
-    path="../data/synth_transactions.parquet",
-    timestamp_field="event_ts",
-)
+OFFLINE_SOURCE = os.getenv("FEAST_OFFLINE_SOURCE", "postgres").lower()
+
+if OFFLINE_SOURCE == "file":
+    TRANSACTIONS_SOURCE = FileSource(
+        path="../data/synth_transactions.parquet",
+        timestamp_field="event_ts",
+    )
+else:
+    if PostgresSource is None:
+        raise ImportError(
+            "PostgresSource is not available. Install a Feast version with "
+            "Postgres offline store support."
+        )
+
+    TRANSACTIONS_SOURCE = PostgresSource(
+        query="""
+        select
+          event_id,
+          event_type,
+          event_ts,
+          user_id,
+          merchant_id,
+          device_id,
+          ip_id,
+          amount,
+          currency,
+          country,
+          channel,
+          drift_phase,
+          validated_at,
+          count(*) over (
+            partition by user_id
+            order by event_ts
+            range between interval '5 minutes' preceding and current row
+          )::bigint as user_txn_count_5m,
+          count(*) over (
+            partition by user_id
+            order by event_ts
+            range between interval '1 hour' preceding and current row
+          )::bigint as user_txn_count_1h,
+          coalesce(
+            sum(amount) over (
+              partition by user_id
+              order by event_ts
+              range between interval '1 hour' preceding and current row
+            ),
+            0.0
+          )::double precision as user_amount_sum_1h,
+          coalesce(
+            avg(amount) over (
+              partition by user_id
+              order by event_ts
+              range between interval '30 days' preceding and current row
+            ),
+            0.0
+          )::double precision as user_avg_amount_30d,
+          0.0::double precision as merchant_chargeback_rate_30d,
+          0.0::double precision as device_risk_score,
+          0.0::double precision as ip_risk_score
+        from txn_validated
+        """,
+        timestamp_field="event_ts",
+        created_timestamp_column="validated_at",
+    )
 
 user_entity = Entity(name="user_id", join_keys=["user_id"], value_type=ValueType.INT64)
 merchant_entity = Entity(

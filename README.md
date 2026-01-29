@@ -41,10 +41,10 @@ and `event_ts`. Remaining model fields are defaulted to: `currency="USD"`,
 `distance_from_home_km=0.0`, `geo_mismatch=0`, `is_new_device=0`, `is_new_ip=0`,
 `drift_phase=0`. Full-payload mode expects all model features in the request.
 
-## Eventing + GX (RabbitMQ → GX → Postgres)
+## End-to-end runbook
 
-This pipeline validates transactions with Great Expectations and writes to
-`txn_validated` or `txn_quarantine`.
+This flow validates transactions with Great Expectations, stores them in Postgres,
+materializes features into Redis, and trains a model with Feast offline features.
 
 ### 1) Start infra
 ```bash
@@ -85,72 +85,91 @@ python src/eventing/publish_transactions.py \
   --max_events 0
 ```
 
-### 6) Verify results
+### 6) Verify Postgres writes
 ```bash
 docker exec -i $(docker ps -qf "name=postgres") psql -U fraud -d fraud_poc -c "select count(*) from txn_validated;"
 docker exec -i $(docker ps -qf "name=postgres") psql -U fraud -d fraud_poc -c "select count(*) from txn_quarantine;"
 ```
 
-### Notes
-- Messages are durable and published to exchange `tx.events` with routing key `txn.created`.
-- Invalid messages are nacked and routed to `tx.raw.dlq`.
-
-### How to test quickly
+### 7) Configure Feast env vars
 ```bash
-python src/synth/generate_synth.py --rows 10000 --format parquet
-python src/eventing/publish_transactions.py --data_path data/synth_transactions.parquet --rate 2000 --max_events 10000
+export POSTGRES_HOST=localhost
+export POSTGRES_PORT=5432
+export POSTGRES_DB=fraud_poc
+export POSTGRES_USER=fraud
+export POSTGRES_PASSWORD=fraud
+export FEAST_OFFLINE_SOURCE=postgres
 ```
 
-RabbitMQ queues:
-- `tx.validated.q` (routing key `txn.validated`)
-- `tx.quarantine.q` (routing key `txn.quarantined`)
+If you want Feast to read features from the local Parquet file instead of Postgres,
+set `FEAST_OFFLINE_SOURCE=file` and re-run `feast apply`.
 
-## Offline training with Feast
-
-Offline training uses Feast historical features for the synthetic dataset and does **not**
-require Redis.
-
-Generate a Parquet dataset:
-```bash
-python src/synth/generate_synth.py --rows 10000 --format parquet
-```
-
-Apply Feast definitions:
+### 8) Apply Feast definitions
 ```bash
 cd feast_repo && feast apply
 ```
 
-Train with Feast offline features:
+### 9) Materialize Postgres → Redis
+```bash
+python src/feast_materialize.py --start now-1d --end now
+```
+
+### 10) Verify online feature fetch
+```bash
+python - <<'PY'
+import psycopg2
+from feast import FeatureStore
+from feast_client import FEAST_FEATURE_REFS
+
+conn = psycopg2.connect("postgresql://fraud:fraud@localhost:5432/fraud_poc")
+cur = conn.cursor()
+cur.execute(
+    "select user_id, merchant_id, device_id, ip_id from txn_validated order by event_ts desc limit 1"
+)
+row = cur.fetchone()
+if not row:
+    raise SystemExit("txn_validated is empty; publish events first.")
+
+entity_row = {
+    "user_id": int(row[0]),
+    "merchant_id": int(row[1]),
+    "device_id": int(row[2]),
+    "ip_id": int(row[3]),
+}
+
+store = FeatureStore(repo_path="feast_repo")
+print(store.get_online_features(FEAST_FEATURE_REFS, [entity_row]).to_dict())
+conn.close()
+PY
+```
+
+### 11) Train with Feast offline features
 ```bash
 python src/train.py \
   --dataset_type synth \
   --data_path data/synth_transactions.parquet \
   --use_feast_offline true \
+  --offline_source validated_db \
   --artifacts_dir artifacts_synth_feast
 ```
 
-## Feast offline training (recommended dev size)
-
+### 12) Train (recommended dev size)
 Use the 10k smoke test for quick checks, but standardize dev runs on a 100k slice.
-Generate a full Parquet dataset (rows can be 1M; training uses a 100k slice):
 ```bash
 python src/synth/generate_synth.py --rows 1000000 --format parquet
-```
-
-Apply Feast definitions:
-```bash
-cd feast_repo && feast apply
-```
-
-Train using the 100k slice:
-```bash
 python src/train.py \
   --dataset_type synth \
   --data_path data/synth_transactions.parquet \
   --use_feast_offline true \
+  --offline_source validated_db \
   --dev_100k true \
   --artifacts_dir artifacts_synth_feast_100k
 ```
+
+### Notes
+- Messages are durable and published to exchange `tx.events` with routing key `txn.created`.
+- Invalid messages are nacked and routed to `tx.raw.dlq`.
+- RabbitMQ queues: `tx.validated.q` (`txn.validated`), `tx.quarantine.q` (`txn.quarantined`).
 
 ## What gets produced
 

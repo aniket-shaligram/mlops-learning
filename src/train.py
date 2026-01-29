@@ -129,6 +129,12 @@ def main() -> None:
         help="Use Feast offline features for synth training.",
     )
     parser.add_argument(
+        "--offline_source",
+        default="file",
+        choices=["file", "postgres", "validated_db"],
+        help="Feast offline source for synth training (file=parquet, validated_db=Postgres).",
+    )
+    parser.add_argument(
         "--max_rows",
         type=int,
         default=None,
@@ -155,7 +161,11 @@ def main() -> None:
     if args.dataset_type == "synth" and use_feast_offline:
         from feast_offline import build_offline_training_frame
 
-        X_raw, y = build_offline_training_frame(args.data_path, max_rows=max_rows)
+        X_raw, y = build_offline_training_frame(
+            args.data_path,
+            max_rows=max_rows,
+            offline_source=args.offline_source,
+        )
     else:
         df = load_dataset(args.data_path)
         if args.dataset_type == "kaggle":
