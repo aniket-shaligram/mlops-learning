@@ -11,35 +11,14 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Synthetic dataset generator
-
-Generate an interpretable fraud dataset (1M rows by default) with velocity features,
-new device/IP signals, geo mismatch, merchant risk, label delay, and drift.
+## Optional: generate synthetic data
 
 ```bash
-python src/synth/generate_synth.py --rows 1000000 --format parquet
+python src/synth/generate_synth.py --rows 100000 --format parquet
 ```
 
-Parquet output is the default format and requires `pyarrow` (included in `requirements.txt`).
-
-Smoke test (10k rows):
-```bash
-python src/synth/generate_synth.py --smoke_test --format csv
-```
-
-This writes:
-- `data/synth_transactions.(csv|parquet)`
-- `examples/one_txn_ids_only.json` (ids-only request example)
-- `data/synth_profiles/` (user/merchant/device/ip profiles)
-
-## Feast features
-
-Training uses Feast offline historical features for the synthetic dataset. Inference
-fetches Feast features online. In ids-only mode, the request must include entity ids
-(`user_id`, `merchant_id`, `device_id`, `ip_id`) plus `amount`, `country`, `channel`,
-and `event_ts`. Remaining model fields are defaulted to: `currency="USD"`,
-`distance_from_home_km=0.0`, `geo_mismatch=0`, `is_new_device=0`, `is_new_ip=0`,
-`drift_phase=0`. Full-payload mode expects all model features in the request.
+Writes `data/synth_transactions.(csv|parquet)` and `examples/one_txn_ids_only.json`.
+Parquet output requires `pyarrow` (included in `requirements.txt`).
 
 ## End-to-end runbook
 

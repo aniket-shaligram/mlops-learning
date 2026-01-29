@@ -6,10 +6,10 @@ import time
 from collections import deque
 from typing import Any, Dict, List, Tuple
 
+import great_expectations as ge
 import pandas as pd
 import pika
 import psycopg2
-from great_expectations.data_context import FileDataContext
 from psycopg2.extras import Json, execute_values
 
 EXCHANGE = "tx.events"
@@ -176,8 +176,7 @@ def main() -> None:
     channel.confirm_delivery()
     channel.basic_qos(prefetch_count=args.prefetch)
 
-    context = FileDataContext(context_root_dir="gx")
-    suite = context.get_expectation_suite(SUITE_NAME)
+    context = ge.get_context(context_root_dir="gx")
     recent_events: deque[float] = deque()
     validated_count = 0
     quarantined_count = 0
@@ -265,7 +264,10 @@ def main() -> None:
             payload = json.loads(body.decode("utf-8"))
             df = pd.DataFrame([payload])
             df = df.reindex(columns=REQUIRED_COLUMNS)
-            validator = context.get_validator(batch_data=df, expectation_suite=suite)
+            validator = context.get_validator(
+                batch_data=df,
+                expectation_suite_name=SUITE_NAME,
+            )
             results = validator.validate().to_json_dict()
             volume_spike = _record_volume()
 

@@ -1,8 +1,8 @@
 {
-  "expectation_suite_name": "txn_event_suite",
+  "name": "txn_event_suite",
   "expectations": [
     {
-      "expectation_type": "expect_table_columns_to_match_set",
+      "type": "expect_table_columns_to_match_set",
       "kwargs": {
         "column_set": [
           "event_id",
@@ -22,79 +22,79 @@
       }
     },
     {
-      "expectation_type": "expect_column_values_to_not_be_null",
+      "type": "expect_column_values_to_not_be_null",
       "kwargs": {
         "column": "event_id"
       }
     },
     {
-      "expectation_type": "expect_column_values_to_not_be_null",
+      "type": "expect_column_values_to_not_be_null",
       "kwargs": {
         "column": "event_type"
       }
     },
     {
-      "expectation_type": "expect_column_values_to_not_be_null",
+      "type": "expect_column_values_to_not_be_null",
       "kwargs": {
         "column": "event_ts"
       }
     },
     {
-      "expectation_type": "expect_column_values_to_not_be_null",
+      "type": "expect_column_values_to_not_be_null",
       "kwargs": {
         "column": "user_id"
       }
     },
     {
-      "expectation_type": "expect_column_values_to_not_be_null",
+      "type": "expect_column_values_to_not_be_null",
       "kwargs": {
         "column": "merchant_id"
       }
     },
     {
-      "expectation_type": "expect_column_values_to_not_be_null",
+      "type": "expect_column_values_to_not_be_null",
       "kwargs": {
         "column": "device_id"
       }
     },
     {
-      "expectation_type": "expect_column_values_to_not_be_null",
+      "type": "expect_column_values_to_not_be_null",
       "kwargs": {
         "column": "ip_id"
       }
     },
     {
-      "expectation_type": "expect_column_values_to_not_be_null",
+      "type": "expect_column_values_to_not_be_null",
       "kwargs": {
         "column": "amount"
       }
     },
     {
-      "expectation_type": "expect_column_values_to_not_be_null",
+      "type": "expect_column_values_to_not_be_null",
       "kwargs": {
         "column": "currency"
       }
     },
     {
-      "expectation_type": "expect_column_values_to_not_be_null",
+      "type": "expect_column_values_to_not_be_null",
       "kwargs": {
         "column": "country"
       }
     },
     {
-      "expectation_type": "expect_column_values_to_not_be_null",
+      "type": "expect_column_values_to_not_be_null",
       "kwargs": {
         "column": "channel"
       }
     },
     {
-      "expectation_type": "expect_column_values_to_not_be_null",
+      "type": "expect_column_values_to_not_be_null",
       "kwargs": {
         "column": "drift_phase"
       }
     },
     {
-      "expectation_type": "expect_column_values_to_be_between",
+      "type": "expect_column_values_to_be_between",
       "kwargs": {
         "column": "amount",
         "min_value": 0.01,
@@ -102,70 +102,70 @@
       }
     },
     {
-      "expectation_type": "expect_column_values_to_be_in_set",
+      "type": "expect_column_values_to_be_in_set",
       "kwargs": {
         "column": "country",
         "value_set": ["US", "GB", "CA", "DE", "IN", "BR", "SG", "AU", "FR", "JP", "NG"]
       }
     },
     {
-      "expectation_type": "expect_column_values_to_be_in_set",
+      "type": "expect_column_values_to_be_in_set",
       "kwargs": {
         "column": "currency",
         "value_set": ["USD", "GBP", "CAD", "EUR", "INR", "BRL", "SGD", "AUD", "JPY", "NGN"]
       }
     },
     {
-      "expectation_type": "expect_column_values_to_be_in_set",
+      "type": "expect_column_values_to_be_in_set",
       "kwargs": {
         "column": "channel",
         "value_set": ["web", "mobile"]
       }
     },
     {
-      "expectation_type": "expect_column_values_to_be_in_set",
+      "type": "expect_column_values_to_be_in_set",
       "kwargs": {
         "column": "event_type",
         "value_set": ["txn.created"]
       }
     },
     {
-      "expectation_type": "expect_column_values_to_be_in_set",
+      "type": "expect_column_values_to_be_in_set",
       "kwargs": {
         "column": "drift_phase",
         "value_set": [0, 1]
       }
     },
     {
-      "expectation_type": "expect_column_values_to_be_between",
+      "type": "expect_column_values_to_be_between",
       "kwargs": {
         "column": "user_id",
         "min_value": 0
       }
     },
     {
-      "expectation_type": "expect_column_values_to_be_between",
+      "type": "expect_column_values_to_be_between",
       "kwargs": {
         "column": "merchant_id",
         "min_value": 0
       }
     },
     {
-      "expectation_type": "expect_column_values_to_be_between",
+      "type": "expect_column_values_to_be_between",
       "kwargs": {
         "column": "device_id",
         "min_value": 0
       }
     },
     {
-      "expectation_type": "expect_column_values_to_be_between",
+      "type": "expect_column_values_to_be_between",
       "kwargs": {
         "column": "ip_id",
         "min_value": 0
       }
     },
     {
-      "expectation_type": "expect_column_values_to_match_regex",
+      "type": "expect_column_values_to_match_regex",
       "kwargs": {
         "column": "event_ts",
         "regex": "^\\d{4}-\\d{2}-\\d{2}T.*Z$"
