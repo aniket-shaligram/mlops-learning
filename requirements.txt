@@ -9,3 +9,4 @@ pyarrow
 feast[redis]
 pika
 psycopg2-binary
+great_expectations

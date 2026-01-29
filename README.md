@@ -114,6 +114,51 @@ python src/synth/generate_synth.py --rows 10000 --format parquet
 python src/eventing/publish_transactions.py --data_path data/synth_transactions.parquet --rate 2000 --max_events 10000
 ```
 
+## Phase 2 — Data sanity layer (Great Expectations)
+
+Phase 2 inserts a GX validator between `tx.raw.q` and downstream storage.
+
+### Run order
+1) Start infra:
+```bash
+docker compose -f ops/docker-compose.yml up -d
+```
+
+2) (Optional) reset volumes to re-init schema:
+```bash
+docker compose -f ops/docker-compose.yml down -v
+docker compose -f ops/docker-compose.yml up -d
+```
+
+3) Run the GX worker:
+```bash
+python src/gx/validate_and_forward.py
+```
+
+4) Publish events:
+```bash
+python src/eventing/publish_transactions.py \
+  --data_path data/synth_transactions.parquet \
+  --rate 5000 \
+  --max_events 0
+```
+
+5) Verify results:
+```bash
+docker exec -i $(docker ps -qf "name=postgres") psql -U fraud -d fraud_poc -c "select count(*) from txn_validated;"
+docker exec -i $(docker ps -qf "name=postgres") psql -U fraud -d fraud_poc -c "select count(*) from txn_quarantine;"
+```
+
+RabbitMQ queues:
+- `tx.validated.q` (routing key `txn.validated`)
+- `tx.quarantine.q` (routing key `txn.quarantined`)
+
+### How to test quickly
+```bash
+python src/synth/generate_synth.py --rows 10000 --format parquet
+python src/eventing/publish_transactions.py --data_path data/synth_transactions.parquet --rate 2000 --max_events 10000
+```
+
 ## Offline training with Feast
 
 Offline training uses Feast historical features for the synthetic dataset and does **not**
