@@ -24,9 +24,17 @@
         <section class="bg-white rounded-lg shadow p-5 space-y-4">
           <div class="flex items-center justify-between">
             <h2 class="text-lg font-semibold">Score a Transaction</h2>
-            <button id="randomBtn" class="text-sm px-3 py-1 rounded bg-slate-200 hover:bg-slate-300">
-              Generate random example
-            </button>
+            <div class="flex items-center gap-2">
+              <select id="driftPreset" class="text-sm border rounded px-2 py-1">
+                <option value="normal">Normal</option>
+                <option value="new_country">Drift: New Country</option>
+                <option value="ato_spike">Drift: ATO Spike</option>
+                <option value="merchant_campaign">Drift: Merchant Campaign</option>
+              </select>
+              <button id="randomBtn" class="text-sm px-3 py-1 rounded bg-slate-200 hover:bg-slate-300">
+                Generate random example
+              </button>
+            </div>
           </div>
           <div class="grid grid-cols-2 gap-3 text-sm">
             <label class="space-y-1">
@@ -86,6 +94,16 @@
             <div class="bg-slate-50 p-2 rounded">Champion: <span id="championScore">-</span></div>
             <div class="bg-slate-50 p-2 rounded">Anomaly: <span id="anomalyScore">-</span></div>
           </div>
+          <div class="text-sm">
+            <div class="text-slate-600 mb-1">Model</div>
+            <div class="flex items-center gap-2">
+              <span id="championBadge" class="px-2 py-1 rounded text-xs bg-slate-100">champion: -</span>
+              <span id="registryBadge" class="px-2 py-1 rounded text-xs bg-slate-100">registry: -</span>
+            </div>
+            <div class="text-xs text-slate-500 mt-1">
+              ref: <span id="championRef">-</span>
+            </div>
+          </div>
           <div class="text-sm text-slate-600">
             Fallbacks: <span id="fallbacksList">none</span>
           </div>
@@ -119,6 +137,21 @@
             <div class="bg-slate-50 p-2 rounded">Errors: <span id="errTotal">-</span></div>
             <div class="bg-slate-50 p-2 rounded">Feast ok: <span id="feastOk">-</span></div>
             <div class="bg-slate-50 p-2 rounded">Redis ok: <span id="redisOk">-</span></div>
+          </div>
+          <div class="text-sm">
+            <div class="text-slate-600">Decision distribution</div>
+            <div class="flex items-center gap-3">
+              <div class="flex-1 h-3 rounded overflow-hidden bg-slate-100" id="distBar">
+                <div id="distApprove" class="h-3 bg-emerald-400 inline-block"></div>
+                <div id="distStepUp" class="h-3 bg-amber-400 inline-block"></div>
+                <div id="distReview" class="h-3 bg-orange-400 inline-block"></div>
+                <div id="distBlock" class="h-3 bg-rose-400 inline-block"></div>
+              </div>
+              <div class="text-xs text-slate-600" id="distCounts">-</div>
+            </div>
+          </div>
+          <div class="text-sm text-slate-600">
+            Latency avg/p95: <span id="latencySummary">-</span>
           </div>
           <div class="text-sm">
             <div class="text-slate-600">Fallbacks: <span id="fallbackCounts">-</span></div>

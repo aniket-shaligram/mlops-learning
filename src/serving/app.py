@@ -127,6 +127,7 @@ def score(event: TransactionEvent):
     response["model_versions"] = {
         "champion_type": models.metadata.get("champion_type"),
         "registry_mode": models.metadata.get("registry_mode"),
+        "champion_ref": (models.metadata.get("champion_uri") or "")[:40],
     }
     response["feature_snapshot"] = features
     response["feast_failed"] = feast_failed
@@ -159,6 +160,7 @@ def health():
             "rules": True,
             "champion": models.champion_model is not None,
             "anomaly": models.anomaly_model is not None,
+            "champion_ref": (models.metadata.get("champion_uri") or "")[:40],
         },
         "feast": {"ok": feast_ok, "error": feast_error},
     }
@@ -199,6 +201,7 @@ def stats():
             "anomaly_loaded": models.anomaly_model is not None,
             "champion_type": models.metadata.get("champion_type"),
             "registry_mode": models.metadata.get("registry_mode", "none"),
+            "champion_ref": (models.metadata.get("champion_uri") or "")[:40],
         },
         "feast": {"ok": feast_ok, "error": feast_error},
         "redis": redis_status,
