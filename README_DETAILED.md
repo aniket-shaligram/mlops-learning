@@ -1,11 +1,7 @@
-# Fraud Scoring Baseline (Synthetic)
+# Fraud Scoring Baseline (Synthetic) — Detailed
 
 Minimal, production-ish baseline for scoring fraud using an interpretable synthetic dataset.
 It trains a model locally, saves artifacts, and scores a single transaction from JSON.
-
-For documentation:
-- `README_DETAILED.md` — full, step-by-step guide
-- `README_SHORT.md` — minimal end-to-end PoC steps
 
 ## Quickstart
 

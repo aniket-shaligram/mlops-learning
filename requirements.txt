@@ -12,3 +12,8 @@ psycopg[binary]
 psycopg-pool
 psycopg2-binary
 great_expectations
+fastapi
+uvicorn[standard]
+prometheus-client
+pydantic
+python-dotenv
