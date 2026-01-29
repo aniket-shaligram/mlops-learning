@@ -55,7 +55,7 @@ RabbitMQ UI: `http://localhost:15672` (guest/guest).
 If Redis is already running on your machine, stop it or remove the container using port `6379`.
 
 ### 2) Initialize schema
-Schema is auto-applied on first start via `/docker-entrypoint-initdb.d`.
+Schema is auto-applied on first start via `/docker-entrypoint-initdb.d` (both 001 and 002 scripts on a fresh volume).
 If you need to re-init the database (drops data), reset the volume:
 ```bash
 docker compose -f ops/docker-compose.yml down -v

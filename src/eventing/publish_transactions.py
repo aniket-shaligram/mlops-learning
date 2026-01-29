@@ -125,6 +125,7 @@ def main() -> None:
             exchange=EXCHANGE,
             routing_key=ROUTING_KEY,
             body=body,
+            mandatory=True,
             properties=pika.BasicProperties(
                 delivery_mode=2,
                 content_type="application/json",
