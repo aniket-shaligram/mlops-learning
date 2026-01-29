@@ -8,5 +8,7 @@ xgboost
 pyarrow
 feast[redis]
 pika
+psycopg[binary]
+psycopg-pool
 psycopg2-binary
 great_expectations

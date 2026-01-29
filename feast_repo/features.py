@@ -9,13 +9,15 @@ except ImportError:  # Feast >= 0.41
     from feast import FileSource
 try:
     from feast.infra.offline_stores.contrib.postgres_offline_store.postgres_source import (
-        PostgresSource,
+        PostgreSQLSource,
     )
 except Exception:
     try:
-        from feast import PostgresSource
+        from feast.infra.offline_stores.contrib.postgres_offline_store.postgres import (
+            PostgreSQLSource,
+        )
     except Exception:  # pragma: no cover - best effort fallback for older Feast
-        PostgresSource = None
+        PostgreSQLSource = None
 from feast.types import Float32, Int64
 from feast.value_type import ValueType
 
@@ -27,13 +29,14 @@ if OFFLINE_SOURCE == "file":
         timestamp_field="event_ts",
     )
 else:
-    if PostgresSource is None:
+    if PostgreSQLSource is None:
         raise ImportError(
-            "PostgresSource is not available. Install a Feast version with "
+            "PostgreSQLSource is not available. Install a Feast version with "
             "Postgres offline store support."
         )
 
-    TRANSACTIONS_SOURCE = PostgresSource(
+    TRANSACTIONS_SOURCE = PostgreSQLSource(
+        name="txn_validated_source",
         query="""
         select
           event_id,

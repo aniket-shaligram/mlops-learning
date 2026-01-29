@@ -10,6 +10,9 @@ import great_expectations as ge
 import pandas as pd
 import pika
 import psycopg2
+from great_expectations.core.batch import Batch
+from great_expectations.execution_engine import PandasExecutionEngine
+from great_expectations.validator.validator import Validator
 from psycopg2.extras import Json, execute_values
 
 EXCHANGE = "tx.events"
@@ -45,6 +48,106 @@ REQUIRED_COLUMNS = [
 
 VOLUME_WINDOW_SECONDS = 60
 VOLUME_SPIKE_THRESHOLD = 20000
+
+
+def _build_validator_from_pandas(df: pd.DataFrame, suite) -> Validator:
+    engine = PandasExecutionEngine()
+    batch = Batch(data=df)
+    return Validator(execution_engine=engine, expectation_suite=suite, batches=[batch])
+
+
+def _add_expectations(validator) -> None:
+    validator.expect_table_columns_to_match_set(
+        column_set=REQUIRED_COLUMNS,
+        exact_match=True,
+    )
+    for column in REQUIRED_COLUMNS:
+        validator.expect_column_values_to_not_be_null(column=column)
+
+    validator.expect_column_values_to_be_between(
+        column="amount",
+        min_value=0.01,
+        max_value=100000,
+    )
+    validator.expect_column_values_to_be_in_set(
+        column="country",
+        value_set=["US", "GB", "CA", "DE", "IN", "BR", "SG", "AU", "FR", "JP", "NG"],
+    )
+    validator.expect_column_values_to_be_in_set(
+        column="currency",
+        value_set=["USD", "GBP", "CAD", "EUR", "INR", "BRL", "SGD", "AUD", "JPY", "NGN"],
+    )
+    validator.expect_column_values_to_be_in_set(
+        column="channel",
+        value_set=["web", "mobile"],
+    )
+    validator.expect_column_values_to_be_in_set(
+        column="event_type",
+        value_set=["txn.created"],
+    )
+    validator.expect_column_values_to_be_in_set(
+        column="drift_phase",
+        value_set=[0, 1],
+    )
+    for column in ["user_id", "merchant_id", "device_id", "ip_id"]:
+        validator.expect_column_values_to_be_between(
+            column=column,
+            min_value=0,
+        )
+        validator.expect_column_values_to_be_of_type(
+            column=column,
+            type_="int64",
+        )
+    validator.expect_column_values_to_match_regex(
+        column="event_ts",
+        regex="^\\d{4}-\\d{2}-\\d{2}T.*Z$",
+    )
+
+
+def _load_or_create_suite(context) -> object:
+    suite = None
+    try:
+        getter = getattr(context, "get_expectation_suite", None)
+        if not callable(getter):
+            raise AttributeError("get_expectation_suite not available")
+        suite = getter(SUITE_NAME)
+    except Exception:
+        suite = None
+        creator = getattr(context, "add_or_update_expectation_suite", None)
+        if callable(creator):
+            suite = creator(expectation_suite_name=SUITE_NAME)
+        else:
+            creator = getattr(context, "create_expectation_suite", None)
+            if callable(creator):
+                try:
+                    suite = creator(expectation_suite_name=SUITE_NAME, overwrite_existing=True)
+                except TypeError:
+                    suite = creator(expectation_suite_name=SUITE_NAME)
+        empty_df = pd.DataFrame(columns=REQUIRED_COLUMNS)
+        if suite is None:
+            validator = _build_validator_from_pandas(empty_df, None)
+        else:
+            validator = _build_validator_from_pandas(empty_df, suite)
+        _add_expectations(validator)
+        try:
+            context.save_expectation_suite(validator.expectation_suite)
+        except Exception:
+            pass
+        suite = validator.expectation_suite
+    return suite
+
+
+def _get_validator(context, df: pd.DataFrame, suite) -> Validator:
+    try:
+        return context.get_validator(batch_data=df, expectation_suite=suite)
+    except Exception:
+        try:
+            return context.get_validator(
+                batch_data=df,
+                expectation_suite_name=SUITE_NAME,
+            )
+        except Exception:
+            return _build_validator_from_pandas(df, suite)
 
 
 def _declare_topology(channel: pika.adapters.blocking_connection.BlockingChannel) -> None:
@@ -177,6 +280,7 @@ def main() -> None:
     channel.basic_qos(prefetch_count=args.prefetch)
 
     context = ge.get_context(context_root_dir="gx")
+    suite = _load_or_create_suite(context)
     recent_events: deque[float] = deque()
     validated_count = 0
     quarantined_count = 0
@@ -264,10 +368,7 @@ def main() -> None:
             payload = json.loads(body.decode("utf-8"))
             df = pd.DataFrame([payload])
             df = df.reindex(columns=REQUIRED_COLUMNS)
-            validator = context.get_validator(
-                batch_data=df,
-                expectation_suite_name=SUITE_NAME,
-            )
+            validator = _get_validator(context, df, suite)
             results = validator.validate().to_json_dict()
             volume_spike = _record_volume()
 
