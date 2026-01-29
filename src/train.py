@@ -11,6 +11,7 @@ import pandas as pd
 from sklearn.metrics import (
     average_precision_score,
     precision_recall_fscore_support,
+    precision_recall_curve,
     roc_auc_score,
 )
 from sklearn.model_selection import train_test_split
@@ -95,9 +96,7 @@ def _log_mlflow(
         for key, value in metrics.items():
             mlflow.log_metric(key, value)
         mlflow.log_artifacts(str(artifacts_dir))
-        mlflow.sklearn.log_model(
-            model, "model", registered_model_name="fraud_scorer"
-        )
+        mlflow.sklearn.log_model(model, "model")
 
 
 def main() -> None:
@@ -138,8 +137,17 @@ def main() -> None:
     model.fit(X_train, y_train)
 
     proba = model.predict_proba(X_test)[:, 1]
-    threshold = 0.5
-    preds = (proba >= threshold).astype(int)
+    precision_curve, recall_curve, thresholds = precision_recall_curve(y_test, proba)
+    if thresholds.size == 0:
+        optimal_threshold = 0.5
+    else:
+        f1_scores = (2 * precision_curve * recall_curve) / (
+            precision_curve + recall_curve + 1e-12
+        )
+        best_index = int(np.argmax(f1_scores[:-1]))
+        optimal_threshold = float(thresholds[best_index])
+
+    preds = (proba >= optimal_threshold).astype(int)
 
     pr_auc = average_precision_score(y_test, proba)
     roc_auc = roc_auc_score(y_test, proba)
@@ -153,7 +161,7 @@ def main() -> None:
         "precision": float(precision),
         "recall": float(recall),
         "f1": float(f1),
-        "threshold": float(threshold),
+        "optimal_threshold": float(optimal_threshold),
     }
 
     metadata = {

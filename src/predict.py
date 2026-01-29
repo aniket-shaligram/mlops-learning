@@ -7,14 +7,14 @@ from typing import Any, Dict
 
 import joblib
 
-from utils import FEATURES, load_json, make_feature_frame, validate_input_payload
+from utils import load_json, make_feature_frame
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Score a single transaction.")
     parser.add_argument("--artifacts_dir", default="artifacts")
     parser.add_argument("--input_json", required=True)
-    parser.add_argument("--threshold", type=float, default=0.5)
+    parser.add_argument("--threshold", type=float, default=None)
     args = parser.parse_args()
 
     artifacts_dir = Path(args.artifacts_dir)
@@ -27,20 +27,29 @@ def main() -> None:
         raise FileNotFoundError(f"Features list not found at {features_path}")
 
     payload: Dict[str, Any] = load_json(args.input_json)
-    validate_input_payload(payload)
 
     model = joblib.load(model_path)
     features_payload = load_json(features_path)
-    feature_list = features_payload.get("features", FEATURES)
+    feature_list = features_payload.get("features", [])
+    if not feature_list:
+        raise ValueError("Features list is empty in artifacts/features.json")
 
-    row = {feature: payload[feature] for feature in feature_list}
-    df = make_feature_frame(row)
+    df = make_feature_frame(payload, feature_list).astype(float)
     proba = float(model.predict_proba(df)[:, 1][0])
 
-    decision = "fraud" if proba >= args.threshold else "legit"
+    threshold = args.threshold
+    if threshold is None:
+        metrics_path = artifacts_dir / "metrics.json"
+        if metrics_path.exists():
+            metrics_payload = load_json(metrics_path)
+            threshold = metrics_payload.get("optimal_threshold")
+        if threshold is None:
+            threshold = 0.5
+
+    decision = "fraud" if proba >= threshold else "legit"
     output = {
         "fraud_probability": proba,
-        "threshold": args.threshold,
+        "threshold": threshold,
         "decision": decision,
     }
     print(json.dumps(output, indent=2))

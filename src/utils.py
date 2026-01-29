@@ -47,15 +47,15 @@ def validate_columns(df: pd.DataFrame) -> None:
         )
 
 
-def validate_input_payload(payload: Dict[str, Any]) -> None:
-    missing = [col for col in FEATURES if col not in payload]
+def validate_input_payload(payload: Dict[str, Any], feature_list: List[str]) -> None:
+    missing = [col for col in feature_list if col not in payload]
     if missing:
         raise ValueError(
             "Input JSON is missing required feature keys: " + ", ".join(missing)
         )
 
 
-def make_feature_frame(payload: Dict[str, Any]) -> pd.DataFrame:
-    validate_input_payload(payload)
-    row = {feature: payload[feature] for feature in FEATURES}
-    return pd.DataFrame([row], columns=FEATURES)
+def make_feature_frame(payload: Dict[str, Any], feature_list: List[str]) -> pd.DataFrame:
+    validate_input_payload(payload, feature_list)
+    row = {feature: payload[feature] for feature in feature_list}
+    return pd.DataFrame([row], columns=feature_list)

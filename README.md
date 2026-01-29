@@ -23,7 +23,7 @@ python src/predict.py --input_json examples/one_txn.json
 Artifacts are written to `./artifacts`:
 - `model.pkl` — trained model
 - `features.json` — list of feature columns used for training
-- `metrics.json` — PR-AUC, ROC-AUC, precision/recall/F1, and metadata
+- `metrics.json` — PR-AUC, ROC-AUC, precision/recall/F1, optimal threshold, and metadata
 - `run_config.json` — training config snapshot
 
 ## Imbalance handling
@@ -43,6 +43,11 @@ python src/train.py --data_path data/creditcard.csv --test_size 0.2 --random_see
 
 Predict:
 ```bash
+python src/predict.py --artifacts_dir artifacts --input_json examples/one_txn.json
+```
+
+If you want to override the decision threshold:
+```bash
 python src/predict.py --artifacts_dir artifacts --input_json examples/one_txn.json --threshold 0.5
 ```
 
@@ -50,7 +55,8 @@ python src/predict.py --artifacts_dir artifacts --input_json examples/one_txn.js
 
 ## MLflow
 
-Training logs to MLflow (params, metrics, artifacts) and registers the model as `fraud_scorer`.
+Training logs to MLflow (params, metrics, artifacts) and logs the model under the run in `./mlruns`.
+You can add model registry later if needed.
 
 Run UI:
 ```bash
