@@ -252,7 +252,7 @@ def _generate_day(
     df = pd.DataFrame(
         {
             "txn_id": np.arange(rows_for_day),
-            "event_ts": event_ts,
+            "event_ts": pd.to_datetime(event_ts, unit="s", utc=True),
             "user_id": user_id,
             "merchant_id": merchant_id,
             "device_id": device_id,
@@ -275,7 +275,7 @@ def _generate_day(
             "ip_risk_score": np.clip(ip_risk_score, 0.0, 1.0),
             "drift_phase": drift_phase,
             "is_fraud": is_fraud.astype(int),
-            "label_available_ts": label_available_ts,
+            "label_available_ts": pd.to_datetime(label_available_ts, unit="s", utc=True),
         }
     )
     return df
@@ -318,14 +318,14 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--fraud_rate", type=float, default=0.01)
     parser.add_argument("--drift_start_day", type=int, default=20)
-    parser.add_argument("--output_path", default="data/synth_transactions.csv")
-    parser.add_argument("--format", choices=["csv", "parquet"], default="csv")
+    parser.add_argument("--output_path", default=None)
+    parser.add_argument("--format", choices=["csv", "parquet"], default="parquet")
     parser.add_argument("--smoke_test", action="store_true")
     args = parser.parse_args()
 
     rows = 10_000 if args.smoke_test else args.rows
     rng = np.random.default_rng(args.seed)
-    output_path = Path(args.output_path)
+    output_path = Path(args.output_path or f"data/synth_transactions.{args.format}")
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     num_users = max(10_000, rows // 20)
@@ -373,7 +373,14 @@ def main() -> None:
         txn_id_offset += rows_for_day
 
         if not sample_written:
-            sample = df_day[SYNTH_FEATURES].iloc[0].to_dict()
+            sample_columns = [
+                "user_id",
+                "merchant_id",
+                "device_id",
+                "ip_id",
+                *SYNTH_FEATURES,
+            ]
+            sample = df_day[sample_columns].iloc[0].to_dict()
             sample_path = Path("examples/one_txn.json")
             sample_path.parent.mkdir(parents=True, exist_ok=True)
             with sample_path.open("w", encoding="utf-8") as handle:

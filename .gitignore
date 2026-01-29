@@ -6,5 +6,6 @@ __pycache__/
 artifacts/
 artifacts_synth/
 data/
+feast_repo/data/
 mlflow.db
 mlruns/

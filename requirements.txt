@@ -6,3 +6,4 @@ mlflow
 lightgbm
 xgboost
 pyarrow
+feast[redis]
