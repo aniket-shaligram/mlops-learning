@@ -6,7 +6,7 @@ mlflow
 lightgbm
 xgboost
 pyarrow
-feast[redis]
+feast[redis,postgres]
 pika
 psycopg[binary]
 psycopg-pool

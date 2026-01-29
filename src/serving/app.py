@@ -3,19 +3,28 @@ from __future__ import annotations
 import json
 import logging
 import os
+import socket
 import time
+from collections import Counter as PyCounter
+from collections import deque
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from fastapi import FastAPI
 from pydantic import BaseModel
 from prometheus_client import Counter, Histogram, generate_latest
 from starlette.responses import Response
+from starlette.responses import FileResponse
+from starlette.staticfiles import StaticFiles
 
 from src.serving.feast_client import OnlineFeatureClient
 from src.serving.model_loader import load_models
 from src.serving.scorer import score_event
 
 LOG_FULL_PAYLOAD = os.getenv("LOG_FULL_PAYLOAD", "false").lower() == "true"
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+UI_ROOT = os.path.join(os.path.dirname(__file__), "ui")
 
 logger = logging.getLogger("serving")
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -26,6 +35,12 @@ FALLBACKS = Counter("fallbacks_total", "Fallback events", ["type"])
 FEAST_FAILURES = Counter("feast_failures_total", "Feast fetch failures")
 MODEL_FAILURES = Counter("model_failures_total", "Model failures", ["model"])
 LATENCY = Histogram("request_latency_seconds", "Request latency", ["endpoint"])
+
+decisions = deque(maxlen=200)
+request_counts = PyCounter()
+error_counts = PyCounter()
+fallback_counts = PyCounter()
+feast_failure_count = 0
 
 
 class TransactionEvent(BaseModel):
@@ -46,6 +61,7 @@ class TransactionEvent(BaseModel):
 app = FastAPI(title="Fraud Inference Gateway")
 models = load_models()
 feast_client = OnlineFeatureClient()
+app.mount("/static", StaticFiles(directory=UI_ROOT), name="static")
 
 
 def _log_decision(event: Dict[str, Any], response: Dict[str, Any], feature_count: int) -> None:
@@ -70,11 +86,15 @@ def _log_decision(event: Dict[str, Any], response: Dict[str, Any], feature_count
 def score(event: TransactionEvent):
     start = time.perf_counter()
     REQUESTS.labels(endpoint="/score").inc()
+    request_counts["/score"] += 1
 
     event_dict = event.dict()
     features, feast_failed = feast_client.fetch_online_features(event_dict)
     if feast_failed:
         FEAST_FAILURES.inc()
+        global feast_failure_count
+        feast_failure_count += 1
+        fallback_counts["feast_failed"] += 1
 
     try:
         response, _latencies = score_event(
@@ -89,11 +109,16 @@ def score(event: TransactionEvent):
         )
     except Exception:
         ERRORS.labels(endpoint="/score").inc()
+        error_counts["/score"] += 1
         raise
+
+    response.setdefault("fallbacks", {})
+    response["fallbacks"]["feast_failed"] = feast_failed
 
     for name, value in response.get("fallbacks", {}).items():
         if value:
             FALLBACKS.labels(type=name).inc()
+            fallback_counts[name] += 1
             if name == "champion_missing":
                 MODEL_FAILURES.labels(model="champion").inc()
             if name == "anomaly_missing":
@@ -103,8 +128,24 @@ def score(event: TransactionEvent):
         "champion_type": models.metadata.get("champion_type"),
         "registry_mode": models.metadata.get("registry_mode"),
     }
+    response["feature_snapshot"] = features
+    response["feast_failed"] = feast_failed
 
     _log_decision(event_dict, response, feature_count=len(features))
+    decisions.append(
+        {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "event_id": event_dict.get("event_id"),
+            "user_id": event_dict.get("user_id"),
+            "amount": event_dict.get("amount"),
+            "country": event_dict.get("country"),
+            "decision": response.get("decision"),
+            "final_score": response.get("final_score"),
+            "scores": response.get("scores"),
+            "fallbacks": [key for key, value in response.get("fallbacks", {}).items() if value],
+            "latency_ms": response.get("latency_ms", {}).get("total"),
+        }
+    )
     LATENCY.labels(endpoint="/score").observe(time.perf_counter() - start)
     return response
 
@@ -126,3 +167,51 @@ def health():
 @app.get("/metrics")
 def metrics():
     return Response(generate_latest(), media_type="text/plain")
+
+
+@app.get("/ui")
+def ui():
+    return FileResponse(os.path.join(UI_ROOT, "index.html"))
+
+
+def _redis_check() -> Dict[str, Any]:
+    try:
+        with socket.create_connection((REDIS_HOST, REDIS_PORT), timeout=0.3) as sock:
+            sock.sendall(b"*1\r\n$4\r\nPING\r\n")
+            data = sock.recv(16)
+            if b"PONG" in data:
+                return {"ok": True, "error": None}
+            return {"ok": False, "error": "Unexpected PING response"}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@app.get("/api/stats")
+def stats():
+    feast_ok, feast_error = feast_client.health_check()
+    redis_status = _redis_check()
+    return {
+        "service": "fraud-poc",
+        "time_utc": datetime.now(timezone.utc).isoformat(),
+        "models": {
+            "rules": True,
+            "champion_loaded": models.champion_model is not None,
+            "anomaly_loaded": models.anomaly_model is not None,
+            "champion_type": models.metadata.get("champion_type"),
+            "registry_mode": models.metadata.get("registry_mode", "none"),
+        },
+        "feast": {"ok": feast_ok, "error": feast_error},
+        "redis": redis_status,
+        "counters": {
+            "requests_total": int(request_counts.get("/score", 0)),
+            "errors_total": int(error_counts.get("/score", 0)),
+            "fallbacks_total": dict(fallback_counts),
+            "feast_failed": int(feast_failure_count),
+        },
+    }
+
+
+@app.get("/api/recent-decisions")
+def recent_decisions(limit: int = 50):
+    limit = max(1, min(limit, 200))
+    return list(decisions)[-limit:]

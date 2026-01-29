@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fraud PoC Demo UI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-slate-50 text-slate-900">
+    <div class="max-w-6xl mx-auto p-6 space-y-6">
+      <header class="flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-semibold">Fraud PoC Demo</h1>
+          <p class="text-sm text-slate-500">FastAPI gateway with Feast + ensemble scoring</p>
+        </div>
+        <div class="text-sm space-x-4">
+          <a class="text-blue-600 hover:underline" href="/docs">/docs</a>
+          <a class="text-blue-600 hover:underline" href="/metrics">/metrics</a>
+          <span class="text-slate-500">RabbitMQ: http://localhost:15672</span>
+        </div>
+      </header>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <section class="bg-white rounded-lg shadow p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold">Score a Transaction</h2>
+            <button id="randomBtn" class="text-sm px-3 py-1 rounded bg-slate-200 hover:bg-slate-300">
+              Generate random example
+            </button>
+          </div>
+          <div class="grid grid-cols-2 gap-3 text-sm">
+            <label class="space-y-1">
+              <span>User ID</span>
+              <input id="user_id" class="w-full border rounded px-2 py-1" type="number" />
+            </label>
+            <label class="space-y-1">
+              <span>Merchant ID</span>
+              <input id="merchant_id" class="w-full border rounded px-2 py-1" type="number" />
+            </label>
+            <label class="space-y-1">
+              <span>Device ID</span>
+              <input id="device_id" class="w-full border rounded px-2 py-1" type="number" />
+            </label>
+            <label class="space-y-1">
+              <span>IP ID</span>
+              <input id="ip_id" class="w-full border rounded px-2 py-1" type="number" />
+            </label>
+            <label class="space-y-1">
+              <span>Amount</span>
+              <input id="amount" class="w-full border rounded px-2 py-1" type="number" step="0.01" />
+            </label>
+            <label class="space-y-1">
+              <span>Currency</span>
+              <input id="currency" class="w-full border rounded px-2 py-1" type="text" value="USD" />
+            </label>
+            <label class="space-y-1">
+              <span>Country</span>
+              <input id="country" class="w-full border rounded px-2 py-1" type="text" value="US" />
+            </label>
+            <label class="space-y-1">
+              <span>Channel</span>
+              <select id="channel" class="w-full border rounded px-2 py-1">
+                <option value="web">web</option>
+                <option value="mobile">mobile</option>
+              </select>
+            </label>
+            <label class="space-y-1">
+              <span>Drift Phase</span>
+              <input id="drift_phase" class="w-full border rounded px-2 py-1" type="number" value="0" />
+            </label>
+          </div>
+          <button id="scoreBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded">
+            Score
+          </button>
+          <p id="scoreError" class="text-sm text-red-600 hidden"></p>
+        </section>
+
+        <section class="bg-white rounded-lg shadow p-5 space-y-4">
+          <h2 class="text-lg font-semibold">Latest Result</h2>
+          <div class="flex items-center gap-3">
+            <span id="decisionBadge" class="px-2 py-1 rounded text-sm bg-slate-200">n/a</span>
+            <span class="text-sm text-slate-600">Final score: <span id="finalScore">-</span></span>
+          </div>
+          <div class="grid grid-cols-3 gap-3 text-sm">
+            <div class="bg-slate-50 p-2 rounded">Rules: <span id="rulesScore">-</span></div>
+            <div class="bg-slate-50 p-2 rounded">Champion: <span id="championScore">-</span></div>
+            <div class="bg-slate-50 p-2 rounded">Anomaly: <span id="anomalyScore">-</span></div>
+          </div>
+          <div class="text-sm text-slate-600">
+            Fallbacks: <span id="fallbacksList">none</span>
+          </div>
+          <div class="text-sm text-slate-600">
+            Latency: <span id="latencyTotal">-</span> ms
+          </div>
+        </section>
+
+        <section class="bg-white rounded-lg shadow p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold">Feature Snapshot</h2>
+            <span id="feastStatus" class="text-xs text-slate-500"></span>
+          </div>
+          <div id="featureWarning" class="hidden text-sm text-amber-700 bg-amber-100 p-2 rounded">
+            Feast fetch failed or features missing. Using fallbacks.
+          </div>
+          <div class="max-h-64 overflow-auto text-sm">
+            <table class="w-full border-collapse">
+              <tbody id="featureTable"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-lg shadow p-5 space-y-3 lg:col-span-2">
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold">Live Activity</h2>
+            <div class="text-xs text-slate-500">Polling every 2s</div>
+          </div>
+          <div class="grid grid-cols-4 gap-3 text-sm">
+            <div class="bg-slate-50 p-2 rounded">Requests: <span id="reqTotal">-</span></div>
+            <div class="bg-slate-50 p-2 rounded">Errors: <span id="errTotal">-</span></div>
+            <div class="bg-slate-50 p-2 rounded">Feast ok: <span id="feastOk">-</span></div>
+            <div class="bg-slate-50 p-2 rounded">Redis ok: <span id="redisOk">-</span></div>
+          </div>
+          <div class="text-sm">
+            <div class="text-slate-600">Fallbacks: <span id="fallbackCounts">-</span></div>
+          </div>
+          <div class="overflow-auto">
+            <table class="w-full text-sm">
+              <thead class="text-left text-slate-500">
+                <tr>
+                  <th class="py-1">Time</th>
+                  <th class="py-1">Event</th>
+                  <th class="py-1">User</th>
+                  <th class="py-1">Amount</th>
+                  <th class="py-1">Decision</th>
+                  <th class="py-1">Score</th>
+                </tr>
+              </thead>
+              <tbody id="decisionTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

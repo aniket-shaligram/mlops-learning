@@ -44,6 +44,7 @@ python src/feast_materialize.py --start now-7d --end now
 python src/train_phase4.py --start now-30d --end now --registered_model_name fraud-risk
 uvicorn src.serving.app:app --host 0.0.0.0 --port 8080 --reload
 ```
+Open `http://localhost:8080/ui`.
 
 ## 7) Test scoring
 ```bash
@@ -53,3 +54,5 @@ curl -X POST http://localhost:8080/score \
 ```
 
 Metrics: `http://localhost:8080/metrics`
+
+Demo UI: `http://localhost:8080/ui`

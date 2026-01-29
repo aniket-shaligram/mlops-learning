@@ -236,3 +236,9 @@ curl -X POST http://localhost:8080/score \
 ```
 
 Metrics: `http://localhost:8080/metrics`
+
+### Demo UI
+```bash
+uvicorn src.serving.app:app --host 0.0.0.0 --port 8080 --reload
+```
+Open `http://localhost:8080/ui` and use the form to score transactions.

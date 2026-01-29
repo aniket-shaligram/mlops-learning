@@ -60,6 +60,24 @@ def _to_iso_utc(value: object) -> str:
     return ts.isoformat().replace("+00:00", "Z")
 
 
+def _derive_label(row: pd.Series) -> int:
+    if "is_fraud" in row and pd.notna(row["is_fraud"]):
+        return int(row["is_fraud"])
+    score = 0.0
+    amount = float(row.get("amount", 0.0) or 0.0)
+    if amount >= 500:
+        score += 1.0
+    if int(row.get("geo_mismatch", 0) or 0) == 1:
+        score += 1.0
+    if int(row.get("is_new_device", 0) or 0) == 1:
+        score += 0.75
+    if int(row.get("is_new_ip", 0) or 0) == 1:
+        score += 0.75
+    if str(row.get("channel", "") or "").lower() == "mobile":
+        score += 0.25
+    return int(score >= 1.0)
+
+
 def _iter_rows(df: pd.DataFrame, max_events: int) -> Iterable[pd.Series]:
     if max_events > 0:
         df = df.head(max_events)
@@ -119,6 +137,7 @@ def main() -> None:
             "country": str(row["country"]),
             "channel": str(row["channel"]),
             "drift_phase": int(row["drift_phase"]),
+            "is_fraud": _derive_label(row),
         }
         body = json.dumps(payload).encode("utf-8")
         ok = channel.basic_publish(
