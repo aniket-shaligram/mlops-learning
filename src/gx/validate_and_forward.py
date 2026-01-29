@@ -117,6 +117,7 @@ def _publish_or_raise(
         exchange=exchange,
         routing_key=routing_key,
         body=body,
+        mandatory=True,
         properties=pika.BasicProperties(
             delivery_mode=2,
             content_type="application/json",
@@ -141,6 +142,13 @@ def _summarize_failures(results: Dict[str, Any]) -> str:
     return "validation_failed: " + ", ".join(sorted(set(failures)))
 
 
+def _make_quarantine_id(payload: Dict[str, Any]) -> str:
+    event_id = payload.get("event_id")
+    if event_id:
+        return str(event_id)
+    return f"unknown:{int(time.time() * 1000)}"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Validate events with GX and forward.")
     parser.add_argument(
@@ -155,6 +163,8 @@ def main() -> None:
     )
     parser.add_argument("--prefetch", type=int, default=500)
     parser.add_argument("--log_every", type=int, default=1000)
+    parser.add_argument("--batch_size", type=int, default=1000)
+    parser.add_argument("--flush_interval_sec", type=float, default=1.0)
     args = parser.parse_args()
 
     pg_conn = _connect_postgres_with_retry(args.pg_dsn)
@@ -167,11 +177,17 @@ def main() -> None:
     channel.basic_qos(prefetch_count=args.prefetch)
 
     context = FileDataContext(context_root_dir="gx")
+    suite = context.get_expectation_suite(SUITE_NAME)
     recent_events: deque[float] = deque()
     validated_count = 0
     quarantined_count = 0
     error_count = 0
     processed = 0
+    last_flush = time.monotonic()
+    validated_rows: List[Tuple[Any, ...]] = []
+    validated_tags: List[int] = []
+    quarantined_rows: List[Tuple[Any, ...]] = []
+    quarantined_tags: List[int] = []
 
     def _record_volume() -> bool:
         now = time.time()
@@ -181,63 +197,62 @@ def main() -> None:
             recent_events.popleft()
         return len(recent_events) > VOLUME_SPIKE_THRESHOLD
 
-    def _insert_validated(payload: Dict[str, Any]) -> None:
-        row = (
-            payload["event_id"],
-            payload["event_type"],
-            payload["event_ts"],
-            int(payload["user_id"]),
-            int(payload["merchant_id"]),
-            int(payload["device_id"]),
-            int(payload["ip_id"]),
-            float(payload["amount"]),
-            payload["currency"],
-            payload["country"],
-            payload["channel"],
-            int(payload["drift_phase"]),
-            Json(payload),
-        )
-        with pg_conn.cursor() as cursor:
-            execute_values(
-                cursor,
-                """
-                insert into txn_validated (
-                    event_id,
-                    event_type,
-                    event_ts,
-                    user_id,
-                    merchant_id,
-                    device_id,
-                    ip_id,
-                    amount,
-                    currency,
-                    country,
-                    channel,
-                    drift_phase,
-                    payload
-                ) values %s
-                on conflict (event_id) do nothing
-                """,
-                [row],
-            )
-        pg_conn.commit()
-
-    def _insert_quarantine(event_id: str, reason: str, payload: Dict[str, Any]) -> None:
-        row = (event_id, reason, Json(payload))
-        with pg_conn.cursor() as cursor:
-            execute_values(
-                cursor,
-                """
-                insert into txn_quarantine (
-                    event_id,
-                    reason,
-                    payload
-                ) values %s
-                on conflict (event_id) do nothing
-                """,
-                [row],
-            )
-        pg_conn.commit()
+    def _flush_buffers() -> None:
+        nonlocal last_flush
+        if not validated_rows and not quarantined_rows:
+            return
+        try:
+            with pg_conn.cursor() as cursor:
+                if validated_rows:
+                    execute_values(
+                        cursor,
+                        """
+                        insert into txn_validated (
+                            event_id,
+                            event_type,
+                            event_ts,
+                            user_id,
+                            merchant_id,
+                            device_id,
+                            ip_id,
+                            amount,
+                            currency,
+                            country,
+                            channel,
+                            drift_phase,
+                            payload
+                        ) values %s
+                        on conflict (event_id) do nothing
+                        """,
+                        validated_rows,
+                    )
+                if quarantined_rows:
+                    execute_values(
+                        cursor,
+                        """
+                        insert into txn_quarantine (
+                            event_id,
+                            reason,
+                            payload
+                        ) values %s
+                        on conflict (event_id) do nothing
+                        """,
+                        quarantined_rows,
+                    )
+            pg_conn.commit()
+            for tag in validated_tags + quarantined_tags:
+                channel.basic_ack(delivery_tag=tag)
+        except Exception as exc:
+            pg_conn.rollback()
+            for tag in validated_tags + quarantined_tags:
+                channel.basic_nack(delivery_tag=tag, requeue=False)
+            print(f"ERROR flushing batch: {exc}")
+        finally:
+            validated_rows.clear()
+            validated_tags.clear()
+            quarantined_rows.clear()
+            quarantined_tags.clear()
+            last_flush = time.monotonic()
 
     def on_message(
         ch: pika.adapters.blocking_connection.BlockingChannel,
@@ -248,31 +263,58 @@ def main() -> None:
         nonlocal validated_count, quarantined_count, error_count, processed
         try:
             payload = json.loads(body.decode("utf-8"))
-            df = pd.DataFrame([payload], columns=REQUIRED_COLUMNS)
-            validator = context.get_validator(batch_data=df, expectation_suite_name=SUITE_NAME)
+            df = pd.DataFrame([payload])
+            df = df.reindex(columns=REQUIRED_COLUMNS)
+            validator = context.get_validator(batch_data=df, expectation_suite=suite)
             results = validator.validate().to_json_dict()
             volume_spike = _record_volume()
 
             if results.get("success") and not volume_spike:
                 _publish_or_raise(channel, VALIDATED_EXCHANGE, VALIDATED_ROUTING_KEY, payload)
-                _insert_validated(payload)
+                validated_rows.append(
+                    (
+                        payload["event_id"],
+                        payload["event_type"],
+                        payload["event_ts"],
+                        int(payload["user_id"]),
+                        int(payload["merchant_id"]),
+                        int(payload["device_id"]),
+                        int(payload["ip_id"]),
+                        float(payload["amount"]),
+                        payload["currency"],
+                        payload["country"],
+                        payload["channel"],
+                        int(payload["drift_phase"]),
+                        Json(payload),
+                    )
+                )
+                validated_tags.append(method.delivery_tag)
                 validated_count += 1
-                ch.basic_ack(delivery_tag=method.delivery_tag)
             else:
                 reason = _summarize_failures(results)
                 if volume_spike:
                     reason = reason + "; volume_spike"
-                quarantine_payload = {"event_id": payload.get("event_id"), "reason": reason, "payload": payload}
+                quarantine_event_id = _make_quarantine_id(payload)
+                quarantine_payload = {
+                    "event_id": quarantine_event_id,
+                    "reason": reason,
+                    "payload": payload,
+                }
                 _publish_or_raise(channel, QUARANTINE_EXCHANGE, QUARANTINE_ROUTING_KEY, quarantine_payload)
-                _insert_quarantine(payload.get("event_id", "unknown"), reason, payload)
+                quarantined_rows.append((quarantine_event_id, reason, Json(payload)))
+                quarantined_tags.append(method.delivery_tag)
                 quarantined_count += 1
-                ch.basic_ack(delivery_tag=method.delivery_tag)
         except Exception as exc:
             error_count += 1
             print(f"ERROR: {exc}")
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
         finally:
             processed += 1
+            if (
+                len(validated_rows) + len(quarantined_rows) >= args.batch_size
+                or (time.monotonic() - last_flush) >= args.flush_interval_sec
+            ):
+                _flush_buffers()
             if args.log_every and processed % args.log_every == 0:
                 print(
                     "counts - validated: "
@@ -286,6 +328,7 @@ def main() -> None:
     except KeyboardInterrupt:
         print("stopping validator")
     finally:
+        _flush_buffers()
         channel.close()
         amqp_conn.close()
         pg_conn.close()

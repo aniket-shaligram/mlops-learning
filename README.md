@@ -41,22 +41,10 @@ and `event_ts`. Remaining model fields are defaulted to: `currency="USD"`,
 `distance_from_home_km=0.0`, `geo_mismatch=0`, `is_new_device=0`, `is_new_ip=0`,
 `drift_phase=0`. Full-payload mode expects all model features in the request.
 
-## Redis (Docker)
+## Eventing + GX (RabbitMQ → GX → Postgres)
 
-Feast online features require Redis. Use Docker Desktop instead of Homebrew:
-```bash
-docker run -d --name feast-redis -p 6379:6379 redis:7
-```
-To stop/remove:
-```bash
-docker stop feast-redis
-docker rm feast-redis
-```
-
-## Phase 1 — Data generation + eventing (RabbitMQ → Postgres)
-
-This phase wires a local event pipeline:
-synthetic generator → RabbitMQ → consumer → Postgres `txn_raw`.
+This pipeline validates transactions with Great Expectations and writes to
+`txn_validated` or `txn_quarantine`.
 
 ### 1) Start infra
 ```bash
@@ -66,7 +54,7 @@ docker compose -f ops/docker-compose.yml up -d
 RabbitMQ UI: `http://localhost:15672` (guest/guest).
 If Redis is already running on your machine, stop it or remove the container using port `6379`.
 
-### 2) Create raw landing table
+### 2) Initialize schema
 Schema is auto-applied on first start via `/docker-entrypoint-initdb.d`.
 If you need to re-init the database (drops data), reset the volume:
 ```bash
@@ -76,12 +64,12 @@ docker compose -f ops/docker-compose.yml up -d
 
 To apply manually inside the container:
 ```bash
-docker exec -i $(docker ps -qf "name=postgres") psql -U fraud -d fraud_poc -f /docker-entrypoint-initdb.d/001_create_raw.sql
+docker exec -i $(docker ps -qf "name=postgres") psql -U fraud -d fraud_poc -f /docker-entrypoint-initdb.d/002_create_validated_quarantine.sql
 ```
 
-### 3) Run the consumer
+### 3) Run the GX worker
 ```bash
-python src/eventing/consume_to_postgres.py
+python src/gx/validate_and_forward.py
 ```
 
 ### 4) Generate synthetic data
@@ -97,15 +85,14 @@ python src/eventing/publish_transactions.py \
   --max_events 0
 ```
 
-### 6) Verify counts
-If you don't have `psql` locally, run it inside the container:
+### 6) Verify results
 ```bash
-docker exec -i $(docker ps -qf "name=postgres") psql -U fraud -d fraud_poc -c "select count(*) from txn_raw;"
+docker exec -i $(docker ps -qf "name=postgres") psql -U fraud -d fraud_poc -c "select count(*) from txn_validated;"
+docker exec -i $(docker ps -qf "name=postgres") psql -U fraud -d fraud_poc -c "select count(*) from txn_quarantine;"
 ```
 
 ### Notes
 - Messages are durable and published to exchange `tx.events` with routing key `txn.created`.
-- The consumer inserts with `on conflict do nothing` on `event_id`.
 - Invalid messages are nacked and routed to `tx.raw.dlq`.
 
 ### How to test quickly
@@ -114,50 +101,9 @@ python src/synth/generate_synth.py --rows 10000 --format parquet
 python src/eventing/publish_transactions.py --data_path data/synth_transactions.parquet --rate 2000 --max_events 10000
 ```
 
-## Phase 2 — Data sanity layer (Great Expectations)
-
-Phase 2 inserts a GX validator between `tx.raw.q` and downstream storage.
-
-### Run order
-1) Start infra:
-```bash
-docker compose -f ops/docker-compose.yml up -d
-```
-
-2) (Optional) reset volumes to re-init schema:
-```bash
-docker compose -f ops/docker-compose.yml down -v
-docker compose -f ops/docker-compose.yml up -d
-```
-
-3) Run the GX worker:
-```bash
-python src/gx/validate_and_forward.py
-```
-
-4) Publish events:
-```bash
-python src/eventing/publish_transactions.py \
-  --data_path data/synth_transactions.parquet \
-  --rate 5000 \
-  --max_events 0
-```
-
-5) Verify results:
-```bash
-docker exec -i $(docker ps -qf "name=postgres") psql -U fraud -d fraud_poc -c "select count(*) from txn_validated;"
-docker exec -i $(docker ps -qf "name=postgres") psql -U fraud -d fraud_poc -c "select count(*) from txn_quarantine;"
-```
-
 RabbitMQ queues:
 - `tx.validated.q` (routing key `txn.validated`)
 - `tx.quarantine.q` (routing key `txn.quarantined`)
-
-### How to test quickly
-```bash
-python src/synth/generate_synth.py --rows 10000 --format parquet
-python src/eventing/publish_transactions.py --data_path data/synth_transactions.parquet --rate 2000 --max_events 10000
-```
 
 ## Offline training with Feast
 
