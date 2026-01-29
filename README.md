@@ -29,15 +29,18 @@ python src/synth/generate_synth.py --smoke_test --format csv
 
 This writes:
 - `data/synth_transactions.(csv|parquet)`
-- `examples/one_txn.json` (sample input for prediction, includes entity IDs)
+- `examples/one_txn.json` (full-payload example, includes entity IDs)
+- `examples/one_txn_ids_only.json` (ids-only request example)
 - `data/synth_profiles/` (user/merchant/device/ip profiles)
 
 ## Feast features
 
 Training uses Feast offline historical features for the synthetic dataset. Inference
-fetches Feast features online; the request still includes transaction context fields
-(`amount`, `hour_of_day`, `geo_mismatch`, `is_new_device`, `is_new_ip`) and categorical
-fields (`currency`, `country`, `channel`).
+fetches Feast features online. In ids-only mode, the request must include entity ids
+(`user_id`, `merchant_id`, `device_id`, `ip_id`) plus `amount`, `country`, `channel`,
+and `event_ts`. Remaining model fields are defaulted to: `currency="USD"`,
+`distance_from_home_km=0.0`, `geo_mismatch=0`, `is_new_device=0`, `is_new_ip=0`,
+`drift_phase=0`. Full-payload mode expects all model features in the request.
 
 ## Offline training with Feast
 
@@ -109,14 +112,14 @@ Train:
 python src/train.py --data_path data/synth_transactions.parquet --dataset_type synth --use_feast_offline true --test_size 0.2 --random_seed 42 --model_type auto --artifacts_dir artifacts_synth_feast
 ```
 
-Predict:
+Predict (ids-only request):
 ```bash
-python src/predict.py --artifacts_dir artifacts_synth_feast --input_json examples/one_txn.json --dataset_type synth --use_feast true
+python src/predict.py --artifacts_dir artifacts_synth_feast --input_json examples/one_txn_ids_only.json --dataset_type synth --use_feast true --ids_only_request true
 ```
 
 If you want to override the decision threshold:
 ```bash
-python src/predict.py --artifacts_dir artifacts_synth --input_json examples/one_txn.json --threshold 0.5
+python src/predict.py --artifacts_dir artifacts_synth_feast --input_json examples/one_txn_ids_only.json --dataset_type synth --use_feast true --ids_only_request true --threshold 0.5
 ```
 
 `--model_type` supports `auto`, `lightgbm`, `xgboost`, or `logreg` (auto prefers LightGBM).

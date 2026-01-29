@@ -63,33 +63,35 @@ def main() -> None:
         raw_features, _, synth_categoricals = get_dataset_config("synth")
         categorical_cols = categorical_cols or synth_categoricals
         if use_feast:
-            from feast_client import get_online_feature_vector
+            from feast_client import ENTITY_KEYS, get_online_feature_vector
 
             if ids_only_request:
-                required_context = {"amount", "country", "channel"}
+                required_context = {"amount", "country", "channel", "event_ts"}
                 missing_context = [key for key in required_context if key not in payload]
-                if missing_context:
+                missing_entities = [key for key in ENTITY_KEYS if key not in payload]
+                if missing_context or missing_entities:
+                    missing = missing_entities + missing_context
                     raise ValueError(
-                        "Input JSON is missing required context fields: "
-                        + ", ".join(missing_context)
+                        "Input JSON is missing required fields: " + ", ".join(missing)
                     )
-                if "event_ts" not in payload:
-                    raise ValueError("Input JSON is missing required field: event_ts")
                 from datetime import datetime
 
                 payload = dict(payload)
                 payload["hour_of_day"] = datetime.fromisoformat(payload["event_ts"]).hour
+                defaults = {
+                    "currency": "USD",
+                    "distance_from_home_km": 0.0,
+                    "geo_mismatch": 0,
+                    "is_new_device": 0,
+                    "is_new_ip": 0,
+                    "drift_phase": 0,
+                }
+                for key, value in defaults.items():
+                    payload.setdefault(key, value)
 
             feast_features = get_online_feature_vector(payload)
             merged_payload = dict(payload)
             merged_payload.update(feast_features)
-            if ids_only_request:
-                missing = [col for col in raw_features if col not in merged_payload]
-                if missing:
-                    raise ValueError(
-                        "Input JSON is missing required non-Feast context fields: "
-                        + ", ".join(missing)
-                    )
             df_raw = make_feature_frame(merged_payload, raw_features)
         else:
             df_raw = make_feature_frame(payload, raw_features)
