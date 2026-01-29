@@ -132,6 +132,30 @@ print(features)
 PY
 ```
 
+## Offline training with Feast
+
+Offline training uses Feast historical features for the synthetic dataset and does **not**
+require Redis.
+
+Generate a Parquet dataset:
+```bash
+python src/synth/generate_synth.py --rows 1000000 --format parquet
+```
+
+Apply Feast definitions:
+```bash
+cd feast_repo && feast apply
+```
+
+Train with Feast offline features:
+```bash
+python src/train.py \
+  --dataset_type synth \
+  --data_path data/synth_transactions.parquet \
+  --use_feast_offline true \
+  --artifacts_dir artifacts_synth_feast
+```
+
 ## What gets produced
 
 Artifacts are written to `./artifacts_synth`:
