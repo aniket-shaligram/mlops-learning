@@ -96,6 +96,12 @@ python src/feast_materialize.py --start now-1d --end now
 ### 10) Verify online feature fetch
 ```bash
 python - <<'PY'
+import os
+import sys
+
+repo_root = "/Users/aniket/Talentica/Learning"
+sys.path.append(repo_root)
+
 import psycopg2
 from feast import FeatureStore
 from feast_client import FEAST_FEATURE_REFS
@@ -196,3 +202,14 @@ mlflow ui
 ```
 
 Open `http://127.0.0.1:5000` in your browser.
+
+## Phase 4 training (multi-model)
+
+Run the multi-model trainer (rules + GBDT + anomaly) and promote the champion:
+```bash
+python src/train_phase4.py --start now-30d --end now --registered_model_name fraud-risk
+```
+
+Champion storage:
+- MLflow registry if configured (stage set via `--promote_stage`)
+- Local fallback under `registry/fraud-risk/champion/`

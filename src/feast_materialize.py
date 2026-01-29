@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 from datetime import datetime, timedelta, timezone
@@ -48,6 +49,12 @@ def main() -> None:
         help="Run `feast apply` before materialization.",
     )
     args = parser.parse_args()
+
+    os.environ.setdefault("POSTGRES_HOST", "localhost")
+    os.environ.setdefault("POSTGRES_PORT", "5432")
+    os.environ.setdefault("POSTGRES_DB", "fraud_poc")
+    os.environ.setdefault("POSTGRES_USER", "fraud")
+    os.environ.setdefault("POSTGRES_PASSWORD", "fraud")
 
     start = _parse_time(args.start)
     end = _parse_time(args.end)
