@@ -6,20 +6,8 @@ from pathlib import Path
 from typing import Any, Dict
 
 import joblib
-import pandas as pd
 
 from utils import encode_synth_features, get_dataset_config, load_json, make_feature_frame
-
-
-def _coerce_hour_of_day(payload: Dict[str, Any]) -> int:
-    if "hour_of_day" in payload:
-        return int(payload["hour_of_day"])
-    if "event_ts" not in payload:
-        raise ValueError("Input JSON must include event_ts or hour_of_day.")
-    ts = pd.to_datetime(payload["event_ts"], utc=True, errors="coerce")
-    if pd.isna(ts):
-        raise ValueError("event_ts is not a valid datetime value.")
-    return int(ts.hour)
 
 
 def main() -> None:
@@ -85,8 +73,12 @@ def main() -> None:
                         "Input JSON is missing required context fields: "
                         + ", ".join(missing_context)
                     )
+                if "event_ts" not in payload:
+                    raise ValueError("Input JSON is missing required field: event_ts")
+                from datetime import datetime
+
                 payload = dict(payload)
-                payload["hour_of_day"] = _coerce_hour_of_day(payload)
+                payload["hour_of_day"] = datetime.fromisoformat(payload["event_ts"]).hour
 
             feast_features = get_online_feature_vector(payload)
             merged_payload = dict(payload)

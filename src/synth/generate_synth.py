@@ -385,6 +385,24 @@ def main() -> None:
             sample_path.parent.mkdir(parents=True, exist_ok=True)
             with sample_path.open("w", encoding="utf-8") as handle:
                 json.dump(sample, handle, indent=2)
+
+            ids_only = df_day[
+                [
+                    "user_id",
+                    "merchant_id",
+                    "device_id",
+                    "ip_id",
+                    "amount",
+                    "country",
+                    "channel",
+                    "event_ts",
+                ]
+            ].iloc[0].to_dict()
+            ids_only["event_ts"] = pd.to_datetime(ids_only["event_ts"], utc=True).isoformat()
+            ids_only_path = Path("examples/one_txn_ids_only.json")
+            with ids_only_path.open("w", encoding="utf-8") as handle:
+                json.dump(ids_only, handle, indent=2)
+
             sample_written = True
 
         _write_chunk(df_day, output_path, args.format, day == 0, writer_state)

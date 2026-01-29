@@ -94,6 +94,19 @@ python src/predict.py --artifacts_dir artifacts_synth --input_json examples/one_
 If you see a missing non-Feast context error, include those fields in the payload
 (e.g. `is_new_device`, `is_new_ip`, `geo_mismatch`, `distance_from_home_km`, `drift_phase`).
 
+### Generating ids-only example request
+
+`python src/synth/generate_synth.py` now also writes `examples/one_txn_ids_only.json`.
+
+```bash
+python src/predict.py \
+  --artifacts_dir artifacts_synth \
+  --input_json examples/one_txn_ids_only.json \
+  --dataset_type synth \
+  --use_feast true \
+  --ids_only_request true
+```
+
 Minimal validation:
 ```bash
 cd feast_repo && feast entities list
