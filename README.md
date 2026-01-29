@@ -51,6 +51,11 @@ Start Redis:
 ```bash
 docker run -p 6379:6379 redis
 ```
+Or with Homebrew:
+```bash
+brew install redis
+brew services start redis
+```
 
 Generate synthetic dataset in Parquet:
 ```bash
@@ -63,15 +68,31 @@ cd feast_repo && feast apply
 ```
 The registry is stored at `feast_repo/data/feast_registry.db` (ignored by git).
 
-Materialize to the online store (example end timestamp covering all data):
+Materialize to the online store (use a current UTC timestamp):
 ```bash
-cd feast_repo && feast materialize-incremental 2024-03-31T00:00:00
+cd feast_repo
+feast materialize-incremental "$(date -u +"%Y-%m-%dT%H:%M:%S")"
+```
+Optional: materialize up to the latest event in the Parquet file:
+```bash
+python - <<'PY'
+import pandas as pd
+
+ts = pd.read_parquet("data/synth_transactions.parquet")["event_ts"].max()
+print(pd.to_datetime(ts, utc=True).strftime("%Y-%m-%dT%H:%M:%S"))
+PY
 ```
 
 Run prediction with Feast:
 ```bash
 python src/predict.py --artifacts_dir artifacts_synth --input_json examples/one_txn.json --dataset_type synth --use_feast true
 ```
+Ids-only request mode (entity ids + minimal context in payload):
+```bash
+python src/predict.py --artifacts_dir artifacts_synth --input_json examples/one_txn.json --dataset_type synth --use_feast true --ids_only_request true
+```
+If you see a missing non-Feast context error, include those fields in the payload
+(e.g. `is_new_device`, `is_new_ip`, `geo_mismatch`, `distance_from_home_km`, `drift_phase`).
 
 Minimal validation:
 ```bash

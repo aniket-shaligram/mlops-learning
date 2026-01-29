@@ -1,6 +1,10 @@
 from datetime import timedelta
 
-from feast import Entity, FeatureView, Field, FileSource
+from feast import Entity, FeatureView, Field
+try:
+    from feast.data_source import FileSource
+except ImportError:  # pragma: no cover - compatibility across Feast versions
+    from feast import FileSource
 from feast.types import Float32, Int64
 from feast.value_type import ValueType
 

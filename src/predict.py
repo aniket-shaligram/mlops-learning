@@ -6,8 +6,20 @@ from pathlib import Path
 from typing import Any, Dict
 
 import joblib
+import pandas as pd
 
 from utils import encode_synth_features, get_dataset_config, load_json, make_feature_frame
+
+
+def _coerce_hour_of_day(payload: Dict[str, Any]) -> int:
+    if "hour_of_day" in payload:
+        return int(payload["hour_of_day"])
+    if "event_ts" not in payload:
+        raise ValueError("Input JSON must include event_ts or hour_of_day.")
+    ts = pd.to_datetime(payload["event_ts"], utc=True, errors="coerce")
+    if pd.isna(ts):
+        raise ValueError("event_ts is not a valid datetime value.")
+    return int(ts.hour)
 
 
 def main() -> None:
@@ -22,6 +34,7 @@ def main() -> None:
         help="Override dataset type from artifacts/run_config.json",
     )
     parser.add_argument("--use_feast", choices=["true", "false"], default=None)
+    parser.add_argument("--ids_only_request", choices=["true", "false"], default="false")
     args = parser.parse_args()
 
     artifacts_dir = Path(args.artifacts_dir)
@@ -56,6 +69,7 @@ def main() -> None:
         use_feast = dataset_type == "synth"
     else:
         use_feast = use_feast.lower() == "true"
+    ids_only_request = args.ids_only_request.lower() == "true"
 
     if dataset_type == "synth":
         raw_features, _, synth_categoricals = get_dataset_config("synth")
@@ -63,9 +77,27 @@ def main() -> None:
         if use_feast:
             from feast_client import get_online_feature_vector
 
+            if ids_only_request:
+                required_context = {"amount", "country", "channel"}
+                missing_context = [key for key in required_context if key not in payload]
+                if missing_context:
+                    raise ValueError(
+                        "Input JSON is missing required context fields: "
+                        + ", ".join(missing_context)
+                    )
+                payload = dict(payload)
+                payload["hour_of_day"] = _coerce_hour_of_day(payload)
+
             feast_features = get_online_feature_vector(payload)
             merged_payload = dict(payload)
             merged_payload.update(feast_features)
+            if ids_only_request:
+                missing = [col for col in raw_features if col not in merged_payload]
+                if missing:
+                    raise ValueError(
+                        "Input JSON is missing required non-Feast context fields: "
+                        + ", ".join(missing)
+                    )
             df_raw = make_feature_frame(merged_payload, raw_features)
         else:
             df_raw = make_feature_frame(payload, raw_features)
