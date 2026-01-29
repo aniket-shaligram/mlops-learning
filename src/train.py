@@ -128,6 +128,17 @@ def main() -> None:
         default="false",
         help="Use Feast offline features for synth training.",
     )
+    parser.add_argument(
+        "--max_rows",
+        type=int,
+        default=None,
+        help="Limit training rows (synth + Feast offline only).",
+    )
+    parser.add_argument(
+        "--dev_100k",
+        action="store_true",
+        help="Use 100k rows for Feast offline dev runs.",
+    )
     parser.add_argument("--artifacts_dir", default="artifacts")
     args = parser.parse_args()
 
@@ -137,10 +148,14 @@ def main() -> None:
 
     artifacts_dir = ensure_dir(args.artifacts_dir)
     feature_list, target_col, categorical_cols = get_dataset_config(args.dataset_type)
+    max_rows = args.max_rows
+    if max_rows is None and args.dev_100k:
+        max_rows = 100000
+
     if args.dataset_type == "synth" and use_feast_offline:
         from feast_offline import build_offline_training_frame
 
-        X_raw, y = build_offline_training_frame(args.data_path)
+        X_raw, y = build_offline_training_frame(args.data_path, max_rows=max_rows)
     else:
         df = load_dataset(args.data_path)
         if args.dataset_type == "kaggle":

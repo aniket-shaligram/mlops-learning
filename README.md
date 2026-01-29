@@ -63,6 +63,29 @@ python src/train.py \
   --artifacts_dir artifacts_synth_feast
 ```
 
+## Feast offline training (recommended dev size)
+
+Use the 10k smoke test for quick checks, but standardize dev runs on a 100k slice.
+Generate a full Parquet dataset (rows can be 1M; training uses a 100k slice):
+```bash
+python src/synth/generate_synth.py --rows 1000000 --format parquet
+```
+
+Apply Feast definitions:
+```bash
+cd feast_repo && feast apply
+```
+
+Train using the 100k slice:
+```bash
+python src/train.py \
+  --dataset_type synth \
+  --data_path data/synth_transactions.parquet \
+  --use_feast_offline true \
+  --dev_100k true \
+  --artifacts_dir artifacts_synth_feast_100k
+```
+
 ## What gets produced
 
 Artifacts are written to `./artifacts_synth_feast`:

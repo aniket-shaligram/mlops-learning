@@ -13,21 +13,26 @@ ENTITY_KEYS = ["user_id", "merchant_id", "device_id", "ip_id"]
 NON_FEAST_FEATURES = [feature for feature in SYNTH_FEATURES if feature not in FEAST_FEATURE_NAMES]
 
 
-def _load_dataset(path: Path, max_rows: int | None) -> pd.DataFrame:
+def _load_dataset(path: Path, columns: list[str], max_rows: int | None) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"Dataset not found at {path}")
 
     suffix = path.suffix.lower()
     if suffix == ".parquet":
-        df = pd.read_parquet(path)
+        df = pd.read_parquet(path, columns=columns)
     elif suffix == ".csv":
-        df = pd.read_csv(path)
+        df = pd.read_csv(path, usecols=columns)
     else:
         raise ValueError(f"Unsupported dataset format: {suffix}")
 
+    if "event_ts" in df.columns:
+        df["event_ts"] = pd.to_datetime(df["event_ts"], utc=True, errors="coerce")
+        if df["event_ts"].isna().any():
+            raise ValueError("event_ts contains invalid or missing timestamps")
+
     if max_rows:
-        df = df.head(max_rows)
-    return df
+        df = df.sort_values("event_ts", ascending=True).head(max_rows)
+    return df.reset_index(drop=True)
 
 
 def _validate_columns(df: pd.DataFrame, required: list[str], label: str) -> None:
@@ -43,10 +48,11 @@ def _validate_columns(df: pd.DataFrame, required: list[str], label: str) -> None
 def _ensure_event_timestamp(df: pd.DataFrame) -> pd.Series:
     if "event_ts" not in df.columns:
         raise ValueError("Dataset is missing required column: event_ts")
-    event_ts = pd.to_datetime(df["event_ts"], utc=True, errors="coerce")
-    if event_ts.isna().any():
-        raise ValueError("event_ts contains invalid or missing timestamps")
-    return event_ts
+    if not pd.api.types.is_datetime64_any_dtype(df["event_ts"]):
+        df["event_ts"] = pd.to_datetime(df["event_ts"], utc=True, errors="coerce")
+        if df["event_ts"].isna().any():
+            raise ValueError("event_ts contains invalid or missing timestamps")
+    return df["event_ts"]
 
 
 def build_offline_training_frame(
@@ -55,7 +61,23 @@ def build_offline_training_frame(
     max_rows: int | None = None,
 ) -> Tuple[pd.DataFrame, pd.Series]:
     path = Path(data_path)
-    df = _load_dataset(path, max_rows)
+    base_columns = [
+        "event_ts",
+        "user_id",
+        "merchant_id",
+        "device_id",
+        "ip_id",
+        "amount",
+        "country",
+        "channel",
+        "geo_mismatch",
+        "is_new_device",
+        "is_new_ip",
+        "hour_of_day",
+        "is_fraud",
+    ]
+    columns = list(dict.fromkeys(base_columns + NON_FEAST_FEATURES))
+    df = _load_dataset(path, columns, max_rows)
 
     event_ts = _ensure_event_timestamp(df)
     _validate_columns(df, ENTITY_KEYS + NON_FEAST_FEATURES, "is_fraud")
