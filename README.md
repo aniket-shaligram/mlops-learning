@@ -67,9 +67,16 @@ RabbitMQ UI: `http://localhost:15672` (guest/guest).
 If Redis is already running on your machine, stop it or remove the container using port `6379`.
 
 ### 2) Create raw landing table
-If you don't have `psql` locally, run it inside the container:
+Schema is auto-applied on first start via `/docker-entrypoint-initdb.d`.
+If you need to re-init the database (drops data), reset the volume:
 ```bash
-docker exec -i $(docker ps -qf "name=postgres") psql -U fraud -d fraud_poc -f /ops/sql/001_create_raw.sql
+docker compose -f ops/docker-compose.yml down -v
+docker compose -f ops/docker-compose.yml up -d
+```
+
+To apply manually inside the container:
+```bash
+docker exec -i $(docker ps -qf "name=postgres") psql -U fraud -d fraud_poc -f /docker-entrypoint-initdb.d/001_create_raw.sql
 ```
 
 ### 3) Run the consumer
@@ -100,6 +107,12 @@ docker exec -i $(docker ps -qf "name=postgres") psql -U fraud -d fraud_poc -c "s
 - Messages are durable and published to exchange `tx.events` with routing key `txn.created`.
 - The consumer inserts with `on conflict do nothing` on `event_id`.
 - Invalid messages are nacked and routed to `tx.raw.dlq`.
+
+### How to test quickly
+```bash
+python src/synth/generate_synth.py --rows 10000 --format parquet
+python src/eventing/publish_transactions.py --data_path data/synth_transactions.parquet --rate 2000 --max_events 10000
+```
 
 ## Offline training with Feast
 

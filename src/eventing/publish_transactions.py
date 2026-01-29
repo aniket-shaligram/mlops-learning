@@ -12,6 +12,37 @@ import pika
 
 EXCHANGE = "tx.events"
 ROUTING_KEY = "txn.created"
+QUEUE = "tx.raw.q"
+DLX = "tx.dlx"
+DLQ = "tx.raw.dlq"
+
+
+def _declare_topology(channel: pika.adapters.blocking_connection.BlockingChannel) -> None:
+    channel.exchange_declare(exchange=EXCHANGE, exchange_type="topic", durable=True)
+    channel.exchange_declare(exchange=DLX, exchange_type="fanout", durable=True)
+    channel.queue_declare(
+        queue=QUEUE,
+        durable=True,
+        arguments={"x-dead-letter-exchange": DLX},
+    )
+    channel.queue_declare(queue=DLQ, durable=True)
+    channel.queue_bind(queue=QUEUE, exchange=EXCHANGE, routing_key=ROUTING_KEY)
+    channel.queue_bind(queue=DLQ, exchange=DLX)
+
+
+def _connect_with_retry(amqp_url: str, attempts: int = 10) -> pika.BlockingConnection:
+    delay = 0.5
+    last_exc: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return pika.BlockingConnection(pika.URLParameters(amqp_url))
+        except Exception as exc:
+            last_exc = exc
+            if attempt == attempts:
+                break
+            time.sleep(delay)
+            delay = min(delay * 2, 8)
+    raise RuntimeError("Unable to connect to RabbitMQ") from last_exc
 
 
 def _load_dataframe(path: Path) -> pd.DataFrame:
@@ -65,9 +96,9 @@ def main() -> None:
     if missing:
         raise ValueError("Dataset is missing required columns: " + ", ".join(missing))
 
-    connection = pika.BlockingConnection(pika.URLParameters(args.amqp_url))
+    connection = _connect_with_retry(args.amqp_url)
     channel = connection.channel()
-    channel.exchange_declare(exchange=EXCHANGE, exchange_type="topic", durable=True)
+    _declare_topology(channel)
     channel.confirm_delivery()
 
     interval = 1.0 / args.rate if args.rate > 0 else 0.0
@@ -77,7 +108,7 @@ def main() -> None:
     for row in _iter_rows(df, args.max_events):
         payload = {
             "event_id": str(uuid4()),
-            "event_type": ROUTING_KEY,
+            "event_type": "txn.created",
             "event_ts": _to_iso_utc(row["event_ts"]),
             "user_id": int(row["user_id"]),
             "merchant_id": int(row["merchant_id"]),
@@ -89,15 +120,22 @@ def main() -> None:
             "channel": str(row["channel"]),
             "drift_phase": int(row["drift_phase"]),
         }
-        body = json.dumps(payload)
+        body = json.dumps(payload).encode("utf-8")
         ok = channel.basic_publish(
             exchange=EXCHANGE,
             routing_key=ROUTING_KEY,
             body=body,
-            properties=pika.BasicProperties(delivery_mode=2),
+            properties=pika.BasicProperties(
+                delivery_mode=2,
+                content_type="application/json",
+            ),
         )
-        if not ok:
-            print("WARN: publish not confirmed")
+        if ok is False:
+            raise RuntimeError("Publish not confirmed by broker")
+        if ok is None:
+            waiter = getattr(channel, "wait_for_confirms", None)
+            if waiter is not None and not waiter():
+                raise RuntimeError("Publish not confirmed by broker")
 
         sent += 1
         if sent % 10_000 == 0:

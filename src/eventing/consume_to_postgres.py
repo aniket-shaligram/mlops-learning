@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from typing import Any, Dict, List, Tuple
 
 import pika
 import psycopg2
-from psycopg2.extras import execute_values
+from psycopg2.extras import Json, execute_values
 
 EXCHANGE = "tx.events"
 ROUTING_KEY = "txn.created"
@@ -46,6 +47,38 @@ def _validate_payload(payload: Dict[str, Any]) -> None:
     missing = [key for key in required if key not in payload]
     if missing:
         raise ValueError("Missing required fields: " + ", ".join(missing))
+    if payload.get("event_type") != ROUTING_KEY:
+        raise ValueError("Invalid event_type: " + str(payload.get("event_type")))
+
+
+def _connect_rabbit_with_retry(amqp_url: str, attempts: int = 10) -> pika.BlockingConnection:
+    delay = 0.5
+    last_exc: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return pika.BlockingConnection(pika.URLParameters(amqp_url))
+        except Exception as exc:
+            last_exc = exc
+            if attempt == attempts:
+                break
+            time.sleep(delay)
+            delay = min(delay * 2, 8)
+    raise RuntimeError("Unable to connect to RabbitMQ") from last_exc
+
+
+def _connect_postgres_with_retry(pg_dsn: str, attempts: int = 10) -> psycopg2.extensions.connection:
+    delay = 0.5
+    last_exc: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return psycopg2.connect(pg_dsn)
+        except Exception as exc:
+            last_exc = exc
+            if attempt == attempts:
+                break
+            time.sleep(delay)
+            delay = min(delay * 2, 8)
+    raise RuntimeError("Unable to connect to Postgres") from last_exc
 
 
 def main() -> None:
@@ -64,10 +97,10 @@ def main() -> None:
     parser.add_argument("--batch_size", type=int, default=1000)
     args = parser.parse_args()
 
-    pg_conn = psycopg2.connect(args.pg_dsn)
+    pg_conn = _connect_postgres_with_retry(args.pg_dsn)
     pg_conn.autocommit = False
 
-    amqp_conn = pika.BlockingConnection(pika.URLParameters(args.amqp_url))
+    amqp_conn = _connect_rabbit_with_retry(args.amqp_url)
     channel = amqp_conn.channel()
     _declare_topology(channel)
     channel.basic_qos(prefetch_count=args.prefetch)
@@ -133,7 +166,7 @@ def main() -> None:
                 payload["country"],
                 payload["channel"],
                 int(payload["drift_phase"]),
-                json.dumps(payload),
+                Json(payload),
             )
             rows.append(row)
             tags.append(method.delivery_tag)
