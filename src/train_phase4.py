@@ -71,23 +71,44 @@ def _pg_dsn() -> str:
 def _load_base_rows(start: datetime, end: datetime, label_key: str) -> Tuple[pd.DataFrame, str]:
     if label_key not in {"is_fraud", "label"}:
         label_key = "is_fraud"
-    sql = f"""
-        select
-          event_ts,
-          user_id,
-          merchant_id,
-          device_id,
-          ip_id,
-          amount,
-          currency,
-          country,
-          channel,
-          drift_phase,
-          coalesce((payload->>'{label_key}')::int, (payload->>'is_fraud')::int, (payload->>'label')::int) as label
-        from txn_validated
-        where event_ts >= %s and event_ts <= %s
-        order by event_ts asc
-    """
+    use_labels = os.getenv("USE_TXN_LABELS", "false").lower() == "true"
+    if use_labels:
+        sql = f"""
+            select
+              v.event_ts,
+              v.user_id,
+              v.merchant_id,
+              v.device_id,
+              v.ip_id,
+              v.amount,
+              v.currency,
+              v.country,
+              v.channel,
+              v.drift_phase,
+              coalesce(l.label, (v.payload->>'{label_key}')::int, (v.payload->>'is_fraud')::int, (v.payload->>'label')::int) as label
+            from txn_validated v
+            left join txn_labels l on v.event_id = l.event_id
+            where v.event_ts >= %s and v.event_ts <= %s
+            order by v.event_ts asc
+        """
+    else:
+        sql = f"""
+            select
+              event_ts,
+              user_id,
+              merchant_id,
+              device_id,
+              ip_id,
+              amount,
+              currency,
+              country,
+              channel,
+              drift_phase,
+              coalesce((payload->>'{label_key}')::int, (payload->>'is_fraud')::int, (payload->>'label')::int) as label
+            from txn_validated
+            where event_ts >= %s and event_ts <= %s
+            order by event_ts asc
+        """
     with psycopg2.connect(_pg_dsn()) as conn:
         with conn.cursor() as cursor:
             cursor.execute(sql, (start, end))

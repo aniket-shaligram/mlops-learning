@@ -15,3 +15,6 @@ gx/checkpoints/
 gx/plugins/
 gx/expectations/.ge_store_backend_id
 monitoring/reports/
+feedback/reports/
+artifacts_phase4_candidate/
+model_bundles/

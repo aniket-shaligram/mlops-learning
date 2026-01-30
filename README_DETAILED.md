@@ -289,3 +289,23 @@ Open the latest Evidently report (macOS):
 ```bash
 open "$(ls -t monitoring/reports/evidently/*/input_drift.html | head -1)"
 ```
+
+## Feedback Loop
+
+Run the feedback loop (labels → perf → retrain trigger):
+```bash
+python src/feedback/run_feedback_loop.py --delay_minutes 5
+```
+
+Outputs:
+- Labels stored in `txn_labels`
+- Performance reports in `feedback/reports/perf/`
+- Retrain trigger report in `feedback/reports/retrain/`
+
+Optional promotion for canary:
+```bash
+python src/feedback/promote_candidate.py --candidate_dir artifacts_phase4_candidate/<ts> --target v2
+```
+Configure serving bundles:
+- `MODEL_BUNDLE_PATH=model_bundles/v1` for v1
+- `MODEL_BUNDLE_PATH=model_bundles/v2` for v2
