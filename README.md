@@ -19,8 +19,12 @@ If you’re new to the repo, start with `README_SHORT.md`. For full details
 
 ## Quickstart demo
 ```bash
-chmod +x scripts/demo_poc.sh scripts/feast_story/*.sh
-./scripts/demo_poc.sh
+chmod +x scripts/demo_*.sh scripts/feast_story/*.sh
+./scripts/demo_baseline.sh
+./scripts/demo_drift.sh
+./scripts/demo_retrain.sh
+# optional canary story
+./scripts/demo_canary.sh
 ```
 
 ## Feast story
@@ -36,15 +40,16 @@ scripts/feast_story/07_fix_materialize.sh
 ```
 
 ## What to open
-- Router UI: `http://localhost:8080/ui`
+- Serving UI (v1): `http://localhost:8083/ui`
+- Serving UI (v2): `http://localhost:8084/ui`
 - Prometheus: `http://localhost:9090`
 - Grafana: `http://localhost:3000`
-- Reports: `http://localhost:8080/reports/index.html`
+- Reports: `http://localhost:8083/reports/index.html`
 
 ## How to know it worked
 - GX quarantine: `txn_quarantine` table has rows
 - Feast online: `scripts/feast_story/03_get_online_features.sh` prints JSON
 - Serving ensemble: `/score` returns `scores` and `fallbacks`
-- Canary/shadow: `GET /admin/traffic` + router `/metrics`
+- Canary/shadow: `./scripts/demo_canary.sh`
 - Drift/SHAP/slices: `monitoring/reports/latest/`
 - Feedback loop: `feedback/reports/retrain/trigger.json`

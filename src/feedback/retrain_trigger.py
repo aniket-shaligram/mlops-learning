@@ -4,10 +4,15 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
+
+repo_root = Path(__file__).resolve().parents[2]
+if str(repo_root) not in sys.path:
+    sys.path.append(str(repo_root))
 
 from src.feedback import evaluate_performance
 from src.utils import ensure_dir, save_json

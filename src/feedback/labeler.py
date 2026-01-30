@@ -4,12 +4,17 @@ import argparse
 import hashlib
 import json
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Tuple
 
 import psycopg2
 from psycopg2.extras import execute_values
+
+repo_root = Path(__file__).resolve().parents[2]
+if str(repo_root) not in sys.path:
+    sys.path.append(str(repo_root))
 
 from src.utils import ensure_dir, save_json
 

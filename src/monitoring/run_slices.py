@@ -108,10 +108,21 @@ def run(hours: int = 24, as_of: str = "now") -> None:
     merged["pred"] = (merged["final_score"] >= 0.5).astype(int)
 
     slices = []
-    for col in ["country", "channel", "drift_phase"]:
+    for col in ["country", "channel", "drift_phase", "served_by"]:
         for value, group in merged.groupby(col):
+            avg_score = float(group["final_score"].mean()) if "final_score" in group else 0.0
+            block_rate = float((group["decision"] == "block").mean()) if "decision" in group else 0.0
             metrics = _metrics(group["label"], group["pred"])
-            slices.append({"slice": col, "value": value, **metrics, "count": int(len(group))})
+            slices.append(
+                {
+                    "slice": col,
+                    "value": value,
+                    "avg_score": avg_score,
+                    "block_rate": block_rate,
+                    **metrics,
+                    "count": int(len(group)),
+                }
+            )
 
     slice_df = pd.DataFrame(slices)
     slice_df.to_csv(report_dir / "slice_metrics.csv", index=False)

@@ -16,8 +16,12 @@ docker compose -f ops/docker-compose.yml up -d postgres redis rabbitmq
 
 ## Demo (single command)
 ```bash
-chmod +x scripts/demo_poc.sh scripts/feast_story/*.sh
-./scripts/demo_poc.sh
+chmod +x scripts/demo_*.sh scripts/feast_story/*.sh
+./scripts/demo_baseline.sh
+./scripts/demo_drift.sh
+./scripts/demo_retrain.sh
+# optional canary story
+./scripts/demo_canary.sh
 ```
 
 ## 3) Run GX worker (terminal 1)

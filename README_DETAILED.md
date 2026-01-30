@@ -13,21 +13,26 @@ pip install -r requirements.txt
 
 ## Quickstart demo
 ```bash
-chmod +x scripts/demo_poc.sh scripts/feast_story/*.sh
-./scripts/demo_poc.sh
+chmod +x scripts/demo_*.sh scripts/feast_story/*.sh
+./scripts/demo_baseline.sh
+./scripts/demo_drift.sh
+./scripts/demo_retrain.sh
+# optional canary story
+./scripts/demo_canary.sh
 ```
 
 What to open:
-- Router UI: `http://localhost:8080/ui`
+- Serving UI (v1): `http://localhost:8083/ui`
+- Serving UI (v2): `http://localhost:8084/ui`
 - Prometheus: `http://localhost:9090`
 - Grafana: `http://localhost:3000`
-- Reports: `http://localhost:8080/reports/index.html`
+- Reports: `http://localhost:8083/reports/index.html`
 
 How to know it worked:
 - GX quarantine: `txn_quarantine` count > 0 or `tx.quarantine.q` messages
 - Feast online: `scripts/feast_story/03_get_online_features.sh` prints JSON
 - Serving ensemble: `/score` returns `scores` + `fallbacks`
-- Canary/shadow: `GET /admin/traffic` and router `/metrics` show split
+- Canary/shadow: `./scripts/demo_canary.sh`
 - Drift report: `monitoring/reports/latest/` populated
 - Labels + retrain: `feedback/reports/retrain/trigger.json` created
 
@@ -346,3 +351,11 @@ python src/feedback/promote_candidate.py --candidate_dir artifacts_phase4_candid
 Configure serving bundles:
 - `MODEL_BUNDLE_PATH=model_bundles/v1` for v1
 - `MODEL_BUNDLE_PATH=model_bundles/v2` for v2
+
+## Single-event explainability
+
+Score one event and explain it:
+```bash
+python -m src.demo.explain_event --transaction_id <id>
+```
+Artifacts are stored under `monitoring/reports/latest/local_explanations/`.

@@ -368,6 +368,7 @@ def main() -> None:
         gbdt_dir = artifacts_root / "gbdt"
         _save_model(gbdt, gbdt_dir / "model.pkl")
         save_json(gbdt_dir / "features.json", {"features": feature_cols})
+        save_json(gbdt_dir / "feature_order.json", {"features": feature_cols})
         log_artifacts_dir(gbdt_dir)
         model_uri = log_model_generic(gbdt, "model", flavor=gbdt_flavor)
         run_results["gbdt"] = metrics

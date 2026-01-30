@@ -288,7 +288,7 @@ def debug_last_decision():
     with psycopg2.connect(PG_DSN) as conn:
         with conn.cursor() as cursor:
             cursor.execute(
-                "select decision_id, event_id, final_score, decision, served_by, features, created_at from decision_log order by created_at desc limit 1"
+                "select decision_id, event_id, event_ts, final_score, decision, served_by, model_versions, scores, features, created_at from decision_log order by created_at desc limit 1"
             )
             row = cursor.fetchone()
     if not row:
@@ -296,9 +296,45 @@ def debug_last_decision():
     return {
         "decision_id": row[0],
         "event_id": row[1],
-        "final_score": row[2],
-        "decision": row[3],
-        "served_by": row[4],
-        "features": row[5],
-        "created_at": row[6].isoformat() if row[6] else None,
+        "event_ts": row[2].isoformat() if row[2] else None,
+        "final_score": row[3],
+        "decision": row[4],
+        "served_by": row[5],
+        "model_versions": row[6],
+        "scores": row[7],
+        "feature_snapshot": row[8],
+        "created_at": row[9].isoformat() if row[9] else None,
+    }
+
+
+@app.get("/debug/decision/{transaction_id}")
+def debug_decision(transaction_id: str):
+    if not DEMO_MODE:
+        return {"status": "disabled"}
+    with psycopg2.connect(PG_DSN) as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                select decision_id, event_id, event_ts, final_score, decision, served_by, model_versions, scores, features, created_at
+                from decision_log
+                where event_id = %s
+                order by created_at desc
+                limit 1
+                """,
+                (transaction_id,),
+            )
+            row = cursor.fetchone()
+    if not row:
+        return {"status": "not_found"}
+    return {
+        "decision_id": row[0],
+        "event_id": row[1],
+        "event_ts": row[2].isoformat() if row[2] else None,
+        "final_score": row[3],
+        "decision": row[4],
+        "served_by": row[5],
+        "model_versions": row[6],
+        "scores": row[7],
+        "feature_snapshot": row[8],
+        "created_at": row[9].isoformat() if row[9] else None,
     }

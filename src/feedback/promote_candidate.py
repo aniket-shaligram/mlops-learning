@@ -3,7 +3,12 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import sys
 from pathlib import Path
+
+repo_root = Path(__file__).resolve().parents[2]
+if str(repo_root) not in sys.path:
+    sys.path.append(str(repo_root))
 
 from src.utils import ensure_dir, save_json
 

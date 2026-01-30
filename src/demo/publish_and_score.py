@@ -5,6 +5,7 @@ import json
 import random
 import time
 from datetime import datetime, timezone
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 
@@ -38,8 +39,12 @@ def _payload(rng: random.Random, mode: str) -> dict:
 def _post(url: str, payload: dict) -> None:
     data = json.dumps(payload).encode("utf-8")
     req = Request(url, data=data, headers={"Content-Type": "application/json"})
-    with urlopen(req, timeout=3) as resp:
-        resp.read()
+    try:
+        with urlopen(req, timeout=3) as resp:
+            resp.read()
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8")
+        raise RuntimeError(f"HTTP {exc.code}: {body}") from exc
 
 
 def main() -> None:
@@ -56,7 +61,15 @@ def main() -> None:
     sleep = 1.0 / args.qps if args.qps > 0 else 0.0
     sent = 0
     for _ in range(total):
-        _post(args.url, _payload(rng, "drift" if args.mode == "drift" else "baseline"))
+        payload = _payload(rng, "drift" if args.mode == "drift" else "baseline")
+        for attempt in range(3):
+            try:
+                _post(args.url, payload)
+                break
+            except Exception as exc:
+                if attempt == 2:
+                    raise
+                time.sleep(0.5)
         sent += 1
         if sleep:
             time.sleep(sleep)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Tuple
@@ -11,6 +12,10 @@ import numpy as np
 import pandas as pd
 import psycopg2
 from sklearn.metrics import precision_recall_fscore_support, roc_auc_score
+
+repo_root = Path(__file__).resolve().parents[2]
+if str(repo_root) not in sys.path:
+    sys.path.append(str(repo_root))
 
 from src.utils import ensure_dir, save_json
 

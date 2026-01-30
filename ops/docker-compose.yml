@@ -49,6 +49,7 @@ services:
       - "8083:8080"
     volumes:
       - ../model_bundles:/app/model_bundles
+      - ../monitoring/reports:/app/monitoring/reports
 
   serving-v2:
     build:
@@ -72,6 +73,7 @@ services:
       - "8084:8080"
     volumes:
       - ../model_bundles:/app/model_bundles
+      - ../monitoring/reports:/app/monitoring/reports
 
   router:
     build:

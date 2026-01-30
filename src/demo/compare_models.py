@@ -28,9 +28,14 @@ def _window(minutes: int) -> Tuple[datetime, datetime]:
     return start, end
 
 
-def _summary(conn, start: datetime, end: datetime) -> List[Dict[str, object]]:
+def _summary(conn, start: datetime, end: datetime, decision_filter: str | None) -> List[Dict[str, object]]:
     served_by = _has_column(conn, "decision_log", "served_by")
     group_col = "served_by" if served_by else "model_versions->>'champion_type'"
+    where_clause = "created_at >= %s and created_at < %s"
+    params = [start, end]
+    if decision_filter:
+        where_clause += " and decision = %s"
+        params.append(decision_filter)
     sql = f"""
         select {group_col} as model_key,
                count(*) as cnt,
@@ -39,12 +44,12 @@ def _summary(conn, start: datetime, end: datetime) -> List[Dict[str, object]]:
                avg(case when decision='review' then 1 else 0 end) as review_rate,
                avg(case when decision='step_up' then 1 else 0 end) as step_up_rate
         from decision_log
-        where created_at >= %s and created_at < %s
+        where {where_clause}
         group by model_key
         order by cnt desc
     """
     with conn.cursor() as cur:
-        cur.execute(sql, (start, end))
+        cur.execute(sql, params)
         rows = cur.fetchall()
         return [
             {
@@ -59,17 +64,22 @@ def _summary(conn, start: datetime, end: datetime) -> List[Dict[str, object]]:
         ]
 
 
-def _precision_recall(conn, start: datetime, end: datetime) -> Dict[str, Dict[str, float]]:
+def _precision_recall(conn, start: datetime, end: datetime, decision_filter: str | None) -> Dict[str, Dict[str, float]]:
     served_by = _has_column(conn, "decision_log", "served_by")
     group_col = "served_by" if served_by else "model_versions->>'champion_type'"
+    where_clause = "d.created_at >= %s and d.created_at < %s"
+    params = [start, end]
+    if decision_filter:
+        where_clause += " and d.decision = %s"
+        params.append(decision_filter)
     sql = f"""
         select {group_col} as model_key, d.final_score, l.label
         from decision_log d
         join txn_labels l on d.event_id = l.event_id
-        where d.created_at >= %s and d.created_at < %s
+        where {where_clause}
     """
     with conn.cursor() as cur:
-        cur.execute(sql, (start, end))
+        cur.execute(sql, params)
         rows = cur.fetchall()
     by_model: Dict[str, List[Tuple[float, int]]] = {}
     for model_key, score, label in rows:
@@ -94,12 +104,13 @@ def _precision_recall(conn, start: datetime, end: datetime) -> Dict[str, Dict[st
 def main() -> None:
     parser = argparse.ArgumentParser(description="Compare recent model performance.")
     parser.add_argument("--minutes", type=int, default=30)
+    parser.add_argument("--decision", help="Filter by decision (e.g., approve/review)")
     args = parser.parse_args()
 
     start, end = _window(args.minutes)
     with psycopg2.connect(_pg_dsn()) as conn:
-        summary = _summary(conn, start, end)
-        labels = _precision_recall(conn, start, end)
+        summary = _summary(conn, start, end, args.decision)
+        labels = _precision_recall(conn, start, end, args.decision)
 
     output = {"window_minutes": args.minutes, "summary": summary}
     if labels:
