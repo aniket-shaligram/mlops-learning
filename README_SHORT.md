@@ -57,6 +57,11 @@ Metrics: `http://localhost:8080/metrics`
 
 Demo UI: `http://localhost:8080/ui`
 
+Generate 200 scoring events (for monitoring reports):
+```bash
+python src/monitoring/seed_decisions.py --count 200
+```
+
 ## Canary / Shadow router (optional, off by default)
 ```bash
 docker compose -f ops/docker-compose.yml up --build router serving-v1 serving-v2

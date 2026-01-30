@@ -243,6 +243,11 @@ uvicorn src.serving.app:app --host 0.0.0.0 --port 8080 --reload
 ```
 Open `http://localhost:8080/ui` and use the form to score transactions.
 
+Generate 200 scoring events (for monitoring reports):
+```bash
+python src/monitoring/seed_decisions.py --count 200
+```
+
 ## Optional: Canary / Shadow Router (off by default)
 
 Default flow runs a single serving app. To enable canary/shadow, run two
