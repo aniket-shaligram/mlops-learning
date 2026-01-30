@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -17,7 +18,7 @@ from src.utils import ensure_dir, save_json
 
 
 def _pg_dsn() -> str:
-    return "postgresql://fraud:fraud@localhost:5432/fraud_poc"
+    return os.getenv("PG_DSN", "postgresql://fraud:fraud@localhost:5432/fraud_poc")
 
 
 def _parse_time(value: str) -> datetime:
@@ -47,7 +48,13 @@ def _fetch_decisions(start: datetime, end: datetime) -> pd.DataFrame:
 
 def _fetch_labels(start: datetime, end: datetime) -> pd.DataFrame:
     sql = """
-        select event_id, (payload->>'is_fraud')::int as label
+        select event_id,
+            coalesce(
+                (payload->>'is_fraud')::int,
+                (payload->>'label')::int,
+                (payload->>'isFraud')::int,
+                0
+            ) as label
         from txn_validated
         where event_ts >= %s and event_ts < %s
     """

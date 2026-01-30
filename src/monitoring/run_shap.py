@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -19,7 +20,7 @@ from src.utils import ensure_dir, save_json
 
 
 def _pg_dsn() -> str:
-    return "postgresql://fraud:fraud@localhost:5432/fraud_poc"
+    return os.getenv("PG_DSN", "postgresql://fraud:fraud@localhost:5432/fraud_poc")
 
 
 def _parse_time(value: str) -> datetime:

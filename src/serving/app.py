@@ -107,6 +107,7 @@ def _insert_decision_log(event: Dict[str, Any], response: Dict[str, Any]) -> Non
         "model_versions": response.get("model_versions", {}),
         "features": response.get("feature_snapshot", {}),
         "latency_ms": response.get("latency_ms", {}),
+        "served_by": response.get("served_by") or MODEL_VERSION or "v1",
     }
     with psycopg2.connect(PG_DSN) as conn:
         with conn.cursor() as cursor:
@@ -115,11 +116,11 @@ def _insert_decision_log(event: Dict[str, Any], response: Dict[str, Any]) -> Non
                 insert into decision_log (
                     event_id, event_ts, user_id, merchant_id, device_id, ip_id,
                     amount, country, channel, drift_phase, final_score, decision,
-                    scores, fallbacks, model_versions, features, latency_ms
+                    scores, fallbacks, model_versions, features, latency_ms, served_by
                 ) values (
                     %(event_id)s, %(event_ts)s, %(user_id)s, %(merchant_id)s, %(device_id)s, %(ip_id)s,
                     %(amount)s, %(country)s, %(channel)s, %(drift_phase)s, %(final_score)s, %(decision)s,
-                    %(scores)s, %(fallbacks)s, %(model_versions)s, %(features)s, %(latency_ms)s
+                    %(scores)s, %(fallbacks)s, %(model_versions)s, %(features)s, %(latency_ms)s, %(served_by)s
                 )
                 """,
                 {

@@ -283,6 +283,7 @@ python src/monitoring/run_all.py --ref_hours 24 --cur_hours 1
 ```
 
 Reports are written under `monitoring/reports/`.
+Monitoring scripts use `PG_DSN` env var (same as serving).
 
 Open the latest Evidently report (macOS):
 ```bash
