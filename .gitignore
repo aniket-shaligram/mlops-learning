@@ -14,3 +14,4 @@ gx/uncommitted/
 gx/checkpoints/
 gx/plugins/
 gx/expectations/.ge_store_backend_id
+monitoring/reports/
