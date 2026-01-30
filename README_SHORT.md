@@ -11,7 +11,7 @@ pip install -r requirements.txt
 
 ## 2) Start infra
 ```bash
-docker compose -f ops/docker-compose.yml up -d
+docker compose -f ops/docker-compose.yml up -d postgres redis rabbitmq
 ```
 
 ## 3) Run GX worker (terminal 1)
@@ -57,7 +57,19 @@ Metrics: `http://localhost:8080/metrics`
 
 Demo UI: `http://localhost:8080/ui`
 
-## Canary / Shadow router (optional)
+## Canary / Shadow router (optional, off by default)
 ```bash
 docker compose -f ops/docker-compose.yml up --build router serving-v1 serving-v2
+```
+
+## Monitoring (optional)
+```bash
+docker compose -f ops/docker-compose.yml up -d prometheus grafana
+python src/monitoring/run_all.py --ref_hours 24 --cur_hours 1
+```
+Prometheus targets: `http://localhost:9090/targets` (expect `host.docker.internal:8080`).
+
+Open latest report (macOS):
+```bash
+open "$(ls -t monitoring/reports/evidently/*/input_drift.html | head -1)"
 ```

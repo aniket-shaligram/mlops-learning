@@ -243,9 +243,10 @@ uvicorn src.serving.app:app --host 0.0.0.0 --port 8080 --reload
 ```
 Open `http://localhost:8080/ui` and use the form to score transactions.
 
-## Canary / Shadow Router
+## Optional: Canary / Shadow Router (off by default)
 
-Run two serving instances plus a router (ports: router 8080, v1 8083, v2 8084):
+Default flow runs a single serving app. To enable canary/shadow, run two
+serving instances plus a router (ports: router 8080, v1 8083, v2 8084):
 ```bash
 docker compose -f ops/docker-compose.yml up --build router serving-v1 serving-v2
 ```
@@ -256,3 +257,29 @@ Switch modes:
 
 Open router UI: `http://localhost:8080/ui`
 Shadow comparisons: `http://localhost:8080/api/shadow-comparisons`
+
+## Monitoring
+
+Run Prometheus + Grafana:
+```bash
+docker compose -f ops/docker-compose.yml up -d prometheus grafana
+```
+
+Grafana: `http://localhost:3000` (admin/admin)  
+Prometheus: `http://localhost:9090`
+
+If you run `uvicorn` locally on `http://localhost:8080`, Prometheus scrapes it via
+`host.docker.internal:8080` from inside the container. Check target status at
+`http://localhost:9090/targets`.
+
+Generate monitoring reports:
+```bash
+python src/monitoring/run_all.py --ref_hours 24 --cur_hours 1
+```
+
+Reports are written under `monitoring/reports/`.
+
+Open the latest Evidently report (macOS):
+```bash
+open "$(ls -t monitoring/reports/evidently/*/input_drift.html | head -1)"
+```

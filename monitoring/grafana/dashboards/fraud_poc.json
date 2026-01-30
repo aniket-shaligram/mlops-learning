@@ -1,0 +1,77 @@
+{
+  "title": "Fraud PoC Monitoring",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "QPS (requests_total)",
+      "targets": [
+        {
+          "expr": "sum(rate(requests_total[1m]))",
+          "legendFormat": "qps"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 Latency",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(request_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Errors",
+      "targets": [
+        {
+          "expr": "sum(rate(errors_total[1m]))",
+          "legendFormat": "errors"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Fallbacks by Type",
+      "targets": [
+        {
+          "expr": "sum(rate(fallbacks_total[5m])) by (type)",
+          "legendFormat": "{{type}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Feast Failures",
+      "targets": [
+        {
+          "expr": "sum(rate(feast_failures_total[5m]))",
+          "legendFormat": "feast_failures"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Model Failures",
+      "targets": [
+        {
+          "expr": "sum(rate(model_failures_total[5m])) by (model)",
+          "legendFormat": "{{model}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Router Canary Split",
+      "targets": [
+        {
+          "expr": "sum(rate(router_canary_routed_total[5m])) by (to)",
+          "legendFormat": "{{to}}"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 37,
+  "version": 1
+}

@@ -52,6 +52,9 @@ function collectPayload() {
 
 function setDecisionBadge(decision) {
   const badge = document.getElementById("decisionBadge");
+  if (!badge) {
+    return;
+  }
   badge.textContent = decision || "n/a";
   badge.className = "px-2 py-1 rounded text-sm";
   const styles = {
@@ -65,24 +68,40 @@ function setDecisionBadge(decision) {
 
 function updateLatestResult(data) {
   setDecisionBadge(data.decision);
-  document.getElementById("finalScore").textContent = data.final_score?.toFixed(4) ?? "-";
-  document.getElementById("rulesScore").textContent = data.scores?.rules?.toFixed(4) ?? "-";
-  document.getElementById("championScore").textContent =
-    data.scores?.champion !== null && data.scores?.champion !== undefined
-      ? data.scores.champion.toFixed(4)
-      : "-";
-  document.getElementById("anomalyScore").textContent =
-    data.scores?.anomaly !== null && data.scores?.anomaly !== undefined
-      ? data.scores.anomaly.toFixed(4)
-      : "-";
-  document.getElementById("servedBy").textContent = data.served_by || "-";
-  document.getElementById("fallbacksList").textContent =
-    data.fallbacks && Object.keys(data.fallbacks).filter((k) => data.fallbacks[k]).join(", ") || "none";
-  document.getElementById("latencyTotal").textContent = data.latency_ms?.total?.toFixed(2) ?? "-";
+  const finalScore = document.getElementById("finalScore");
+  if (finalScore) finalScore.textContent = data.final_score?.toFixed(4) ?? "-";
+  const rulesScore = document.getElementById("rulesScore");
+  if (rulesScore) rulesScore.textContent = data.scores?.rules?.toFixed(4) ?? "-";
+  const championScore = document.getElementById("championScore");
+  if (championScore) {
+    championScore.textContent =
+      data.scores?.champion !== null && data.scores?.champion !== undefined
+        ? data.scores.champion.toFixed(4)
+        : "-";
+  }
+  const anomalyScore = document.getElementById("anomalyScore");
+  if (anomalyScore) {
+    anomalyScore.textContent =
+      data.scores?.anomaly !== null && data.scores?.anomaly !== undefined
+        ? data.scores.anomaly.toFixed(4)
+        : "-";
+  }
+  const servedBy = document.getElementById("servedBy");
+  if (servedBy) servedBy.textContent = data.served_by || "-";
+  const fallbacksList = document.getElementById("fallbacksList");
+  if (fallbacksList) {
+    fallbacksList.textContent =
+      (data.fallbacks && Object.keys(data.fallbacks).filter((k) => data.fallbacks[k]).join(", ")) ||
+      "none";
+  }
+  const latencyTotal = document.getElementById("latencyTotal");
+  if (latencyTotal) latencyTotal.textContent = data.latency_ms?.total?.toFixed(2) ?? "-";
 }
 
 async function score() {
-  scoreError.classList.add("hidden");
+  if (scoreError) {
+    scoreError.classList.add("hidden");
+  }
   try {
     const payload = collectPayload();
     const resp = await fetch("/score", {
@@ -96,8 +115,10 @@ async function score() {
     const data = await resp.json();
     updateLatestResult(data);
   } catch (err) {
-    scoreError.textContent = err.message;
-    scoreError.classList.remove("hidden");
+    if (scoreError) {
+      scoreError.textContent = err.message;
+      scoreError.classList.remove("hidden");
+    }
   }
 }
 
@@ -105,10 +126,14 @@ async function pollStats() {
   try {
     const resp = await fetch("/api/stats");
     const data = await resp.json();
-    document.getElementById("routerMode").textContent = data.router?.mode || "-";
-    document.getElementById("canaryPercent").textContent = data.router?.canary_percent ?? "-";
-    document.getElementById("v1Ok").textContent = data.v1?.status === "ok" ? "yes" : "no";
-    document.getElementById("v2Ok").textContent = data.v2?.status === "ok" ? "yes" : "no";
+    const routerMode = document.getElementById("routerMode");
+    if (routerMode) routerMode.textContent = data.router?.mode || "-";
+    const canaryPercent = document.getElementById("canaryPercent");
+    if (canaryPercent) canaryPercent.textContent = data.router?.canary_percent ?? "-";
+    const v1Ok = document.getElementById("v1Ok");
+    if (v1Ok) v1Ok.textContent = data.v1?.status === "ok" ? "yes" : "no";
+    const v2Ok = document.getElementById("v2Ok");
+    if (v2Ok) v2Ok.textContent = data.v2?.status === "ok" ? "yes" : "no";
   } catch (err) {
     // ignore
   }
@@ -119,7 +144,9 @@ async function pollShadow() {
     const resp = await fetch("/api/shadow-comparisons?limit=20");
     const data = await resp.json();
     const table = document.getElementById("shadowTable");
-    table.innerHTML = "";
+    if (table) {
+      table.innerHTML = "";
+    }
     data.slice().reverse().forEach((row) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -130,15 +157,17 @@ async function pollShadow() {
         <td class="py-1">${row.score_delta?.toFixed?.(3) ?? "-"}</td>
         <td class="py-1">${row.decision_diff ? "yes" : "no"}</td>
       `;
-      table.appendChild(tr);
+      if (table) {
+        table.appendChild(tr);
+      }
     });
   } catch (err) {
     // ignore
   }
 }
 
-randomBtn.addEventListener("click", fillRandom);
-scoreBtn.addEventListener("click", score);
+randomBtn?.addEventListener("click", fillRandom);
+scoreBtn?.addEventListener("click", score);
 
 fillRandom();
 pollStats();

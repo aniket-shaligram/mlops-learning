@@ -17,6 +17,9 @@ const driftPreset = document.getElementById("driftPreset");
 
 function setDecisionBadge(decision) {
   const badge = document.getElementById("decisionBadge");
+  if (!badge) {
+    return;
+  }
   badge.textContent = decision || "n/a";
   badge.className = "px-2 py-1 rounded text-sm";
   const styles = {
@@ -77,39 +80,67 @@ function collectPayload() {
 
 function updateLatestResult(data) {
   setDecisionBadge(data.decision);
-  document.getElementById("finalScore").textContent = data.final_score?.toFixed(4) ?? "-";
-  document.getElementById("rulesScore").textContent = data.scores?.rules?.toFixed(4) ?? "-";
-  document.getElementById("championScore").textContent =
-    data.scores?.champion !== null && data.scores?.champion !== undefined
-      ? data.scores.champion.toFixed(4)
-      : "-";
-  document.getElementById("anomalyScore").textContent =
-    data.scores?.anomaly !== null && data.scores?.anomaly !== undefined
-      ? data.scores.anomaly.toFixed(4)
-      : "-";
-  document.getElementById("fallbacksList").textContent =
-    data.fallbacks && Object.keys(data.fallbacks).filter((k) => data.fallbacks[k]).join(", ") || "none";
-  document.getElementById("latencyTotal").textContent = data.latency_ms?.total?.toFixed(2) ?? "-";
-  document.getElementById("championBadge").textContent =
-    `champion: ${data.model_versions?.champion_type || "-"}`;
-  document.getElementById("registryBadge").textContent =
-    `registry: ${data.model_versions?.registry_mode || "-"}`;
-  document.getElementById("championRef").textContent = data.model_versions?.champion_ref || "-";
+  const finalScore = document.getElementById("finalScore");
+  if (finalScore) finalScore.textContent = data.final_score?.toFixed(4) ?? "-";
+  const rulesScore = document.getElementById("rulesScore");
+  if (rulesScore) rulesScore.textContent = data.scores?.rules?.toFixed(4) ?? "-";
+  const championScore = document.getElementById("championScore");
+  if (championScore) {
+    championScore.textContent =
+      data.scores?.champion !== null && data.scores?.champion !== undefined
+        ? data.scores.champion.toFixed(4)
+        : "-";
+  }
+  const anomalyScore = document.getElementById("anomalyScore");
+  if (anomalyScore) {
+    anomalyScore.textContent =
+      data.scores?.anomaly !== null && data.scores?.anomaly !== undefined
+        ? data.scores.anomaly.toFixed(4)
+        : "-";
+  }
+  const fallbacksList = document.getElementById("fallbacksList");
+  if (fallbacksList) {
+    fallbacksList.textContent =
+      (data.fallbacks && Object.keys(data.fallbacks).filter((k) => data.fallbacks[k]).join(", ")) ||
+      "none";
+  }
+  const latencyTotal = document.getElementById("latencyTotal");
+  if (latencyTotal) latencyTotal.textContent = data.latency_ms?.total?.toFixed(2) ?? "-";
+  const championBadge = document.getElementById("championBadge");
+  if (championBadge) {
+    championBadge.textContent = `champion: ${data.model_versions?.champion_type || "-"}`;
+  }
+  const registryBadge = document.getElementById("registryBadge");
+  if (registryBadge) {
+    registryBadge.textContent = `registry: ${data.model_versions?.registry_mode || "-"}`;
+  }
+  const championRef = document.getElementById("championRef");
+  if (championRef) championRef.textContent = data.model_versions?.champion_ref || "-";
 
   const featureTable = document.getElementById("featureTable");
-  featureTable.innerHTML = "";
+  if (featureTable) {
+    featureTable.innerHTML = "";
+  }
   const features = data.feature_snapshot || {};
   Object.keys(features).forEach((key) => {
     const row = document.createElement("tr");
     row.innerHTML = `<td class="py-1 pr-4 text-slate-500">${key}</td><td class="py-1">${features[key]}</td>`;
-    featureTable.appendChild(row);
+    if (featureTable) {
+      featureTable.appendChild(row);
+    }
   });
-  document.getElementById("featureWarning").classList.toggle("hidden", !data.feast_failed);
-  document.getElementById("feastStatus").textContent = data.feast_failed ? "feast failed" : "feast ok";
+  const featureWarning = document.getElementById("featureWarning");
+  if (featureWarning) {
+    featureWarning.classList.toggle("hidden", !data.feast_failed);
+  }
+  const feastStatus = document.getElementById("feastStatus");
+  if (feastStatus) feastStatus.textContent = data.feast_failed ? "feast failed" : "feast ok";
 }
 
 async function score() {
-  scoreError.classList.add("hidden");
+  if (scoreError) {
+    scoreError.classList.add("hidden");
+  }
   try {
     const payload = collectPayload();
     const resp = await fetch("/score", {
@@ -123,8 +154,10 @@ async function score() {
     const data = await resp.json();
     updateLatestResult(data);
   } catch (err) {
-    scoreError.textContent = err.message;
-    scoreError.classList.remove("hidden");
+    if (scoreError) {
+      scoreError.textContent = err.message;
+      scoreError.classList.remove("hidden");
+    }
   }
 }
 
@@ -132,11 +165,18 @@ async function pollStats() {
   try {
     const resp = await fetch("/api/stats");
     const data = await resp.json();
-    document.getElementById("reqTotal").textContent = data.counters?.requests_total ?? "-";
-    document.getElementById("errTotal").textContent = data.counters?.errors_total ?? "-";
-    document.getElementById("feastOk").textContent = data.feast?.ok ? "yes" : "no";
-    document.getElementById("redisOk").textContent = data.redis?.ok ? "yes" : "no";
-    document.getElementById("fallbackCounts").textContent = JSON.stringify(data.counters?.fallbacks_total || {});
+    const reqTotal = document.getElementById("reqTotal");
+    if (reqTotal) reqTotal.textContent = data.counters?.requests_total ?? "-";
+    const errTotal = document.getElementById("errTotal");
+    if (errTotal) errTotal.textContent = data.counters?.errors_total ?? "-";
+    const feastOk = document.getElementById("feastOk");
+    if (feastOk) feastOk.textContent = data.feast?.ok ? "yes" : "no";
+    const redisOk = document.getElementById("redisOk");
+    if (redisOk) redisOk.textContent = data.redis?.ok ? "yes" : "no";
+    const fallbackCounts = document.getElementById("fallbackCounts");
+    if (fallbackCounts) {
+      fallbackCounts.textContent = JSON.stringify(data.counters?.fallbacks_total || {});
+    }
   } catch (err) {
     // ignore
   }
@@ -157,23 +197,36 @@ async function pollDecisions() {
       }
     });
     const total = Math.max(1, data.length);
-    document.getElementById("distApprove").style.width = `${(counts.approve / total) * 100}%`;
-    document.getElementById("distStepUp").style.width = `${(counts.step_up / total) * 100}%`;
-    document.getElementById("distReview").style.width = `${(counts.review / total) * 100}%`;
-    document.getElementById("distBlock").style.width = `${(counts.block / total) * 100}%`;
-    document.getElementById("distCounts").textContent = `A:${counts.approve} S:${counts.step_up} R:${counts.review} B:${counts.block}`;
+    const distApprove = document.getElementById("distApprove");
+    if (distApprove) distApprove.style.width = `${(counts.approve / total) * 100}%`;
+    const distStepUp = document.getElementById("distStepUp");
+    if (distStepUp) distStepUp.style.width = `${(counts.step_up / total) * 100}%`;
+    const distReview = document.getElementById("distReview");
+    if (distReview) distReview.style.width = `${(counts.review / total) * 100}%`;
+    const distBlock = document.getElementById("distBlock");
+    if (distBlock) distBlock.style.width = `${(counts.block / total) * 100}%`;
+    const distCounts = document.getElementById("distCounts");
+    if (distCounts) {
+      distCounts.textContent = `A:${counts.approve} S:${counts.step_up} R:${counts.review} B:${counts.block}`;
+    }
 
     if (latencies.length > 0) {
       latencies.sort((a, b) => a - b);
       const avg = latencies.reduce((a, b) => a + b, 0) / latencies.length;
       const p95 = latencies[Math.floor(latencies.length * 0.95)];
-      document.getElementById("latencySummary").textContent = `${avg.toFixed(2)} / ${p95.toFixed(2)} ms`;
+      const latencySummary = document.getElementById("latencySummary");
+      if (latencySummary) {
+        latencySummary.textContent = `${avg.toFixed(2)} / ${p95.toFixed(2)} ms`;
+      }
     } else {
-      document.getElementById("latencySummary").textContent = "-";
+      const latencySummary = document.getElementById("latencySummary");
+      if (latencySummary) latencySummary.textContent = "-";
     }
 
     const table = document.getElementById("decisionTable");
-    table.innerHTML = "";
+    if (table) {
+      table.innerHTML = "";
+    }
     data.slice().reverse().forEach((row) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -184,15 +237,17 @@ async function pollDecisions() {
         <td class="py-1">${row.decision || "-"}</td>
         <td class="py-1">${row.final_score?.toFixed(3) ?? "-"}</td>
       `;
-      table.appendChild(tr);
+      if (table) {
+        table.appendChild(tr);
+      }
     });
   } catch (err) {
     // ignore
   }
 }
 
-randomBtn.addEventListener("click", fillRandom);
-scoreBtn.addEventListener("click", score);
+randomBtn?.addEventListener("click", fillRandom);
+scoreBtn?.addEventListener("click", score);
 
 fillRandom();
 pollStats();

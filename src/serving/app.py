@@ -10,6 +10,8 @@ from collections import deque
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+import psycopg2
+from psycopg2.extras import Json
 from fastapi import FastAPI
 from pydantic import BaseModel
 from prometheus_client import Counter, Histogram, generate_latest
@@ -26,6 +28,7 @@ MODEL_VERSION = os.getenv("MODEL_VERSION", "v1")
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 UI_ROOT = os.path.join(os.path.dirname(__file__), "ui")
+PG_DSN = os.getenv("PG_DSN", "postgresql://fraud:fraud@localhost:5432/fraud_poc")
 
 logger = logging.getLogger("serving")
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -83,6 +86,52 @@ def _log_decision(event: Dict[str, Any], response: Dict[str, Any], feature_count
     logger.info(json.dumps(payload))
 
 
+def _insert_decision_log(event: Dict[str, Any], response: Dict[str, Any]) -> None:
+    event_ts = event.get("event_ts") or datetime.now(timezone.utc).isoformat()
+    payload = {
+        "event_id": event.get("event_id"),
+        "event_ts": event_ts,
+        "user_id": event.get("user_id"),
+        "merchant_id": event.get("merchant_id"),
+        "device_id": event.get("device_id"),
+        "ip_id": event.get("ip_id"),
+        "amount": event.get("amount"),
+        "country": event.get("country"),
+        "channel": event.get("channel"),
+        "drift_phase": event.get("drift_phase", 0),
+        "final_score": response.get("final_score", 0.0),
+        "decision": response.get("decision", "unknown"),
+        "scores": response.get("scores", {}),
+        "fallbacks": response.get("fallbacks", {}),
+        "model_versions": response.get("model_versions", {}),
+        "features": response.get("feature_snapshot", {}),
+        "latency_ms": response.get("latency_ms", {}),
+    }
+    with psycopg2.connect(PG_DSN) as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                insert into decision_log (
+                    event_id, event_ts, user_id, merchant_id, device_id, ip_id,
+                    amount, country, channel, drift_phase, final_score, decision,
+                    scores, fallbacks, model_versions, features, latency_ms
+                ) values (
+                    %(event_id)s, %(event_ts)s, %(user_id)s, %(merchant_id)s, %(device_id)s, %(ip_id)s,
+                    %(amount)s, %(country)s, %(channel)s, %(drift_phase)s, %(final_score)s, %(decision)s,
+                    %(scores)s, %(fallbacks)s, %(model_versions)s, %(features)s, %(latency_ms)s
+                )
+                """,
+                {
+                    **payload,
+                    "scores": Json(payload["scores"]),
+                    "fallbacks": Json(payload["fallbacks"]),
+                    "model_versions": Json(payload["model_versions"]),
+                    "features": Json(payload["features"]),
+                    "latency_ms": Json(payload["latency_ms"]),
+                },
+            )
+
+
 @app.post("/score")
 def score(event: TransactionEvent):
     start = time.perf_counter()
@@ -135,6 +184,10 @@ def score(event: TransactionEvent):
     response["feast_failed"] = feast_failed
 
     _log_decision(event_dict, response, feature_count=len(features))
+    try:
+        _insert_decision_log(event_dict, response)
+    except Exception as exc:
+        logger.error(json.dumps({"decision_log_error": str(exc)}))
     decisions.append(
         {
             "ts": datetime.now(timezone.utc).isoformat(),

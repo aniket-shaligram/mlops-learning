@@ -17,3 +17,6 @@ uvicorn[standard]
 prometheus-client
 pydantic
 python-dotenv
+evidently
+shap
+matplotlib
