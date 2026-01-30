@@ -35,6 +35,11 @@ app.mount("/static", StaticFiles(directory=UI_ROOT), name="static")
 decisions = deque(maxlen=200)
 shadow_comparisons = deque(maxlen=200)
 router_counts = Counter()
+router_state = {
+    "mode": ROUTER_MODE,
+    "canary_percent": CANARY_PERCENT,
+    "shadow": ROUTER_MODE == "shadow",
+}
 
 
 class TransactionEvent(BaseModel):
@@ -68,7 +73,30 @@ def _get_json(url: str, timeout: float = 0.2) -> Dict[str, Any]:
 
 
 def _choose_canary(user_id: int) -> bool:
-    return (hash(user_id) % 100) < CANARY_PERCENT
+    return (hash(user_id) % 100) < int(router_state.get("canary_percent", CANARY_PERCENT))
+
+
+class TrafficConfig(BaseModel):
+    canary_percent: int = 10
+    shadow: bool = True
+
+
+@app.get("/admin/traffic")
+def get_traffic():
+    return {
+        "mode": router_state.get("mode"),
+        "canary_percent": router_state.get("canary_percent"),
+        "shadow": router_state.get("shadow"),
+    }
+
+
+@app.post("/admin/traffic")
+def set_traffic(config: TrafficConfig):
+    percent = max(0, min(100, int(config.canary_percent)))
+    router_state["canary_percent"] = percent
+    router_state["shadow"] = bool(config.shadow)
+    router_state["mode"] = "shadow" if router_state["shadow"] else "canary"
+    return get_traffic()
 
 
 @app.get("/api/canary-preview")
@@ -87,7 +115,7 @@ def score(event: TransactionEvent):
     payload = event.dict()
     use_v2 = _choose_canary(event.user_id)
 
-    if ROUTER_MODE == "canary":
+    if router_state.get("mode") == "canary":
         target = V2_URL if use_v2 else V1_URL
         CANARY_ROUTED.labels(to="v2" if use_v2 else "v1").inc()
         response = _post_json(target, payload)
@@ -171,8 +199,8 @@ def stats():
         "service": "fraud-router",
         "time_utc": datetime.now(timezone.utc).isoformat(),
         "router": {
-            "mode": ROUTER_MODE,
-            "canary_percent": CANARY_PERCENT,
+            "mode": router_state.get("mode"),
+            "canary_percent": router_state.get("canary_percent"),
         },
         "v1": v1,
         "v2": v2,

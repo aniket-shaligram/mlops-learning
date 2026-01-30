@@ -68,6 +68,11 @@ def main() -> None:
     latest_shap = _stage_latest(reports_root, "shap", "shap_summary.png", "shap_summary.png")
     latest_slices = _stage_latest(reports_root, "slices", "slice_metrics.csv", "slice_metrics.csv")
 
+    latest_dir = Path(index_dir) / "latest"
+    ensure_dir(latest_dir)
+    if latest_input and latest_input.endswith(".html"):
+        _stage_latest(reports_root, "evidently", "input_drift.html", "evidently_drift.html")
+
     def _as_panel(path: str) -> str:
         if not path:
             return "<div class='empty'>No report yet</div>"
@@ -221,6 +226,10 @@ def main() -> None:
         slices_panel=_as_panel(latest_slices),
     )
     index_path.write_text(html.strip(), encoding="utf-8")
+
+    latest_index = Path(index_dir) / "latest" / "index.html"
+    ensure_dir(latest_index.parent)
+    latest_index.write_text(html.strip(), encoding="utf-8")
 
 
 if __name__ == "__main__":

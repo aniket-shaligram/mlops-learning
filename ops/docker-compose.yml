@@ -34,7 +34,7 @@ services:
     environment:
       APP_MODULE: src.serving.app:app
       MODEL_VERSION: v1
-      MODEL_BUNDLE_PATH: /app/artifacts_phase4
+      MODEL_BUNDLE_PATH: /app/model_bundles/v1
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: fraud_poc
@@ -47,6 +47,8 @@ services:
       - redis
     ports:
       - "8083:8080"
+    volumes:
+      - ../model_bundles:/app/model_bundles
 
   serving-v2:
     build:
@@ -55,7 +57,7 @@ services:
     environment:
       APP_MODULE: src.serving.app:app
       MODEL_VERSION: v2
-      MODEL_BUNDLE_PATH: /app/artifacts_phase4_v2
+      MODEL_BUNDLE_PATH: /app/model_bundles/v2
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: fraud_poc
@@ -68,6 +70,8 @@ services:
       - redis
     ports:
       - "8084:8080"
+    volumes:
+      - ../model_bundles:/app/model_bundles
 
   router:
     build:

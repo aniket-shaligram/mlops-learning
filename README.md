@@ -16,3 +16,35 @@ pip install -r requirements.txt
 
 If you’re new to the repo, start with `README_SHORT.md`. For full details
 (Feast, MLflow, Serving, Monitoring, Canary/Shadow), use `README_DETAILED.md`.
+
+## Quickstart demo
+```bash
+chmod +x scripts/demo_poc.sh scripts/feast_story/*.sh
+./scripts/demo_poc.sh
+```
+
+## Feast story
+Run in order:
+```
+scripts/feast_story/01_feast_inspect.sh
+scripts/feast_story/02_materialize_baseline.sh
+scripts/feast_story/03_get_online_features.sh
+scripts/feast_story/04_score_and_show_features.sh
+scripts/feast_story/05a_flush_redis.sh
+scripts/feast_story/06_score_after_stale.sh
+scripts/feast_story/07_fix_materialize.sh
+```
+
+## What to open
+- Router UI: `http://localhost:8080/ui`
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000`
+- Reports: `http://localhost:8080/reports/index.html`
+
+## How to know it worked
+- GX quarantine: `txn_quarantine` table has rows
+- Feast online: `scripts/feast_story/03_get_online_features.sh` prints JSON
+- Serving ensemble: `/score` returns `scores` and `fallbacks`
+- Canary/shadow: `GET /admin/traffic` + router `/metrics`
+- Drift/SHAP/slices: `monitoring/reports/latest/`
+- Feedback loop: `feedback/reports/retrain/trigger.json`

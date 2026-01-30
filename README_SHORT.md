@@ -14,6 +14,12 @@ pip install -r requirements.txt
 docker compose -f ops/docker-compose.yml up -d postgres redis rabbitmq
 ```
 
+## Demo (single command)
+```bash
+chmod +x scripts/demo_poc.sh scripts/feast_story/*.sh
+./scripts/demo_poc.sh
+```
+
 ## 3) Run GX worker (terminal 1)
 ```bash
 python src/gx/validate_and_forward.py

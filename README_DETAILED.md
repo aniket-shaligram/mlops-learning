@@ -11,6 +11,26 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+## Quickstart demo
+```bash
+chmod +x scripts/demo_poc.sh scripts/feast_story/*.sh
+./scripts/demo_poc.sh
+```
+
+What to open:
+- Router UI: `http://localhost:8080/ui`
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000`
+- Reports: `http://localhost:8080/reports/index.html`
+
+How to know it worked:
+- GX quarantine: `txn_quarantine` count > 0 or `tx.quarantine.q` messages
+- Feast online: `scripts/feast_story/03_get_online_features.sh` prints JSON
+- Serving ensemble: `/score` returns `scores` + `fallbacks`
+- Canary/shadow: `GET /admin/traffic` and router `/metrics` show split
+- Drift report: `monitoring/reports/latest/` populated
+- Labels + retrain: `feedback/reports/retrain/trigger.json` created
+
 ## Optional: generate synthetic data
 
 ```bash
@@ -225,7 +245,7 @@ Run:
 ```bash
 python src/train_phase4.py --start now-30d --end now --registered_model_name fraud-risk
 python src/feast_materialize.py --start now-7d --end now
-uvicorn src.serving.app:app --host 0.0.0.0 --port 8080 --reload
+DEMO_MODE=1 uvicorn src.serving.app:app --host 0.0.0.0 --port 8080 --reload
 ```
 
 Test:
@@ -263,6 +283,11 @@ Switch modes:
 Open router UI: `http://localhost:8080/ui`
 Shadow comparisons: `http://localhost:8080/api/shadow-comparisons`
 
+Admin toggle (no restart):
+```bash
+curl -X POST http://localhost:8080/admin/traffic -H 'Content-Type: application/json' -d '{"canary_percent":20,"shadow":false}'
+```
+
 ## Monitoring
 
 Run Prometheus + Grafana:
@@ -288,6 +313,18 @@ Monitoring scripts use `PG_DSN` env var (same as serving).
 Open the latest Evidently report (macOS):
 ```bash
 open "$(ls -t monitoring/reports/evidently/*/input_drift.html | head -1)"
+```
+
+## Feast story
+Run in order:
+```
+scripts/feast_story/01_feast_inspect.sh
+scripts/feast_story/02_materialize_baseline.sh
+scripts/feast_story/03_get_online_features.sh
+scripts/feast_story/04_score_and_show_features.sh
+scripts/feast_story/05a_flush_redis.sh
+scripts/feast_story/06_score_after_stale.sh
+scripts/feast_story/07_fix_materialize.sh
 ```
 
 ## Feedback Loop

@@ -24,6 +24,7 @@ from src.serving.model_loader import load_models
 from src.serving.scorer import score_event
 
 LOG_FULL_PAYLOAD = os.getenv("LOG_FULL_PAYLOAD", "false").lower() == "true"
+DEMO_MODE = os.getenv("DEMO_MODE", "0") == "1"
 MODEL_VERSION = os.getenv("MODEL_VERSION", "v1")
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
@@ -278,3 +279,26 @@ def stats():
 def recent_decisions(limit: int = 50):
     limit = max(1, min(limit, 200))
     return list(decisions)[-limit:]
+
+
+@app.get("/debug/last-decision")
+def debug_last_decision():
+    if not DEMO_MODE:
+        return {"status": "disabled"}
+    with psycopg2.connect(PG_DSN) as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "select decision_id, event_id, final_score, decision, served_by, features, created_at from decision_log order by created_at desc limit 1"
+            )
+            row = cursor.fetchone()
+    if not row:
+        return {"status": "empty"}
+    return {
+        "decision_id": row[0],
+        "event_id": row[1],
+        "final_score": row[2],
+        "decision": row[3],
+        "served_by": row[4],
+        "features": row[5],
+        "created_at": row[6].isoformat() if row[6] else None,
+    }
