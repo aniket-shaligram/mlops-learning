@@ -66,6 +66,7 @@ app = FastAPI(title="Fraud Inference Gateway")
 models = load_models()
 feast_client = OnlineFeatureClient()
 app.mount("/static", StaticFiles(directory=UI_ROOT), name="static")
+app.mount("/reports", StaticFiles(directory="monitoring/reports"), name="reports")
 
 
 def _log_decision(event: Dict[str, Any], response: Dict[str, Any], feature_count: int) -> None:

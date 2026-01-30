@@ -55,6 +55,16 @@ def _fetch_labels(start: datetime, end: datetime) -> pd.DataFrame:
         return pd.read_sql(sql, conn, params=(start, end))
 
 
+def _decision_as_label(decision: pd.Series) -> pd.Series:
+    mapping = {
+        "approve": 0,
+        "step_up": 0,
+        "review": 1,
+        "block": 1,
+    }
+    return decision.fillna("").str.lower().map(mapping).fillna(0).astype(int)
+
+
 def _metrics(y_true: pd.Series, y_pred: pd.Series) -> Dict[str, float]:
     precision, recall, f1, _ = precision_recall_fscore_support(
         y_true, y_pred, average="binary", zero_division=0
@@ -76,14 +86,16 @@ def run(hours: int = 24, as_of: str = "now") -> None:
     decisions = _fetch_decisions(start, end)
     labels = _fetch_labels(start, end)
 
-    if decisions.empty or labels.empty:
+    if decisions.empty:
         save_json(report_dir / "summary.json", {"status": "insufficient_data"})
         return
 
-    merged = decisions.merge(labels, on="event_id", how="left")
-    if merged["label"].isna().all():
-        save_json(report_dir / "summary.json", {"status": "labels_missing"})
-        return
+    merged = decisions.merge(labels, on="event_id", how="left") if not labels.empty else decisions.copy()
+    if "label" not in merged.columns or merged["label"].isna().all():
+        merged["label"] = _decision_as_label(merged["decision"])
+        label_mode = "fallback_decision"
+    else:
+        label_mode = "payload_label"
 
     merged["label"] = merged["label"].fillna(0).astype(int)
     merged["pred"] = (merged["final_score"] >= 0.5).astype(int)
@@ -96,7 +108,10 @@ def run(hours: int = 24, as_of: str = "now") -> None:
 
     slice_df = pd.DataFrame(slices)
     slice_df.to_csv(report_dir / "slice_metrics.csv", index=False)
-    save_json(report_dir / "summary.json", {"status": "ok", "rows": int(len(merged))})
+    save_json(
+        report_dir / "summary.json",
+        {"status": "ok", "rows": int(len(merged)), "label_mode": label_mode},
+    )
 
 
 def main() -> None:

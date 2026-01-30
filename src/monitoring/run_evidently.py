@@ -134,18 +134,21 @@ def run(ref_hours: int = 24, cur_hours: int = 1, as_of: str = "now") -> None:
 
     input_report = Report(metrics=[metric_ctor()])
     input_snapshot = input_report.run(current_data=cur_inputs, reference_data=ref_inputs)
+    input_snapshot.save_json(str(report_dir / "input_drift.json"))
     input_snapshot.save_html(str(report_dir / "input_drift.html"))
 
     feature_ref = _flatten_features(ref_df)
     feature_cur = _flatten_features(cur_df)
     feature_report = Report(metrics=[metric_ctor()])
     feature_snapshot = feature_report.run(current_data=feature_cur, reference_data=feature_ref)
+    feature_snapshot.save_json(str(report_dir / "feature_drift.json"))
     feature_snapshot.save_html(str(report_dir / "feature_drift.html"))
 
     pred_ref = ref_df[["final_score", "decision"]].copy()
     pred_cur = cur_df[["final_score", "decision"]].copy()
     pred_report = Report(metrics=[metric_ctor()])
     pred_snapshot = pred_report.run(current_data=pred_cur, reference_data=pred_ref)
+    pred_snapshot.save_json(str(report_dir / "prediction_drift.json"))
     pred_snapshot.save_html(str(report_dir / "prediction_drift.html"))
 
     summary["input_drift"] = {

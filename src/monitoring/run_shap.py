@@ -14,7 +14,7 @@ import psycopg2
 repo_root = Path(__file__).resolve().parents[2]
 sys.path.append(str(repo_root))
 
-from src.serving.model_loader import load_models
+from src.serving.model_loader import load_models, _load_joblib, _resolve_local_champion_path
 from src.utils import ensure_dir, save_json
 
 
@@ -44,6 +44,8 @@ def _fetch_features(start: datetime, end: datetime, sample: int) -> pd.DataFrame
         select features
         from decision_log
         where created_at >= %s and created_at < %s
+          and features != '{}'::jsonb
+        order by created_at desc
         limit %s
     """
     with psycopg2.connect(_pg_dsn()) as conn:
@@ -55,11 +57,16 @@ def _fetch_features(start: datetime, end: datetime, sample: int) -> pd.DataFrame
 
 def _prepare_frame(df: pd.DataFrame, feature_list: list[str]) -> pd.DataFrame:
     if not feature_list:
+        for col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
         return df
     for col in feature_list:
         if col not in df.columns:
             df[col] = 0
-    return df[feature_list]
+    df = df[feature_list]
+    for col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+    return df
 
 
 def run(ref_hours: int = 24, cur_hours: int = 1, as_of: str = "now", sample_size: int = 500) -> None:
@@ -87,14 +94,31 @@ def run(ref_hours: int = 24, cur_hours: int = 1, as_of: str = "now", sample_size
         summary["status"] = "model_missing"
         save_json(report_dir / "summary.json", summary)
         return
+    if model.__class__.__name__ == "PyFuncModel":
+        champion_type = bundle.metadata.get("champion_type")
+        registered_name = bundle.metadata.get("registered_model_name")
+        local_path = _resolve_local_champion_path(champion_type, registered_name) if champion_type else None
+        local_model = _load_joblib(local_path) if local_path else None
+        if local_model is not None:
+            model = local_model
 
     ref_df = _fetch_features(ref_start, ref_end, sample_size)
     cur_df = _fetch_features(cur_start, cur_end, sample_size)
 
     if ref_df.empty or cur_df.empty:
-        summary["status"] = "insufficient_data"
-        save_json(report_dir / "summary.json", summary)
-        return
+        if ref_df.empty and len(cur_df) >= 200:
+            split_idx = int(len(cur_df) * 0.6)
+            ref_df = cur_df.iloc[:split_idx].copy()
+            cur_df = cur_df.iloc[split_idx:].copy()
+            summary["status"] = "fallback_split"
+            summary["ref_rows"] = int(len(ref_df))
+            summary["cur_rows"] = int(len(cur_df))
+        else:
+            summary["status"] = "insufficient_data"
+            summary["ref_rows"] = int(len(ref_df))
+            summary["cur_rows"] = int(len(cur_df))
+            save_json(report_dir / "summary.json", summary)
+            return
 
     try:
         import shap
