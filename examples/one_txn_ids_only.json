@@ -1,10 +1,10 @@
 {
-  "user_id": 7678,
-  "merchant_id": 55,
-  "device_id": 8439,
-  "ip_id": 3988,
-  "amount": 60.59113388374319,
-  "country": "FR",
+  "user_id": 9911,
+  "merchant_id": 1934,
+  "device_id": 9315,
+  "ip_id": 4596,
+  "amount": 275.34465600558093,
+  "country": "IN",
   "channel": "mobile",
-  "event_ts": "2024-01-01T00:09:30+00:00"
+  "event_ts": "2024-01-01T00:00:54+00:00"
 }

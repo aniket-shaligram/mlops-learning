@@ -50,6 +50,9 @@ cp -R artifacts_phase4/* model_bundles/v1/ || true
 docker compose -f ops/docker-compose.yml up -d --build serving-v1
 python src/demo/wait_for_http.py --url "http://localhost:8083/health" --timeout 120
 
+echo "==> Model intuition"
+python -m src.demo.model_intuition
+
 echo "==> Baseline traffic"
 python src/demo/publish_and_score.py --url "${DEMO_SCORE_URL}" --qps "${DEMO_QPS}" --seconds "${DEMO_SECONDS_BASELINE}" --mode baseline --seed "${DEMO_SEED}"
 

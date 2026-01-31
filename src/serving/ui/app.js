@@ -14,6 +14,10 @@ const scoreBtn = document.getElementById("scoreBtn");
 const randomBtn = document.getElementById("randomBtn");
 const scoreError = document.getElementById("scoreError");
 const driftPreset = document.getElementById("driftPreset");
+const intuitionBtn = document.getElementById("intuitionBtn");
+const intuitionModal = document.getElementById("intuitionModal");
+const intuitionClose = document.getElementById("intuitionClose");
+const intuitionContent = document.getElementById("intuitionContent");
 
 function setDecisionBadge(decision) {
   const badge = document.getElementById("decisionBadge");
@@ -248,6 +252,40 @@ async function pollDecisions() {
 
 randomBtn?.addEventListener("click", fillRandom);
 scoreBtn?.addEventListener("click", score);
+if (intuitionBtn && intuitionModal && intuitionClose && intuitionContent) {
+  intuitionBtn.addEventListener("click", async () => {
+    intuitionModal.classList.remove("hidden");
+    try {
+      const resp = await fetch("/reports/latest/model_intuition.json");
+      const data = await resp.json();
+      const models = data.models || [];
+      intuitionContent.innerHTML = models
+        .map((m) => {
+          const feats = (m.top_features || [])
+            .slice(0, 5)
+            .map((f) => `<li>${f.feature}: ${f.importance ?? f.mean_abs_shap ?? ""}</li>`)
+            .join("");
+          const thresholds = m.thresholds
+            ? `<pre class="bg-slate-50 p-2 rounded">${JSON.stringify(m.thresholds, null, 2)}</pre>`
+            : "";
+          return `
+            <div class="border rounded p-3">
+              <div class="font-semibold">${m.title}</div>
+              <div class="text-slate-600">${m.summary || ""}</div>
+              ${feats ? `<ul class="list-disc ml-5 mt-2">${feats}</ul>` : ""}
+              ${thresholds}
+            </div>
+          `;
+        })
+        .join("");
+    } catch (err) {
+      intuitionContent.textContent = "Intuition file not found. Run: python -m src.demo.model_intuition";
+    }
+  });
+  intuitionClose.addEventListener("click", () => {
+    intuitionModal.classList.add("hidden");
+  });
+}
 
 fillRandom();
 pollStats();

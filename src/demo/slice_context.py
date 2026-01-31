@@ -13,6 +13,8 @@ def _load_event(path: str) -> Dict[str, str]:
 
 def _load_slices(path: str) -> List[Dict[str, str]]:
     rows = []
+    if not Path(path).exists():
+        return rows
     with open(path, newline="", encoding="utf-8") as fh:
         reader = csv.DictReader(fh)
         for row in reader:
@@ -29,6 +31,12 @@ def main() -> None:
 
     event = _load_event(args.event_json)
     rows = _load_slices(args.slices_path)
+    if not rows:
+        out = {"context": [], "status": "slices_missing"}
+        Path(args.output_json).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.output_json).write_text(json.dumps(out, indent=2), encoding="utf-8")
+        print(json.dumps(out, indent=2))
+        return
 
     context = []
     for dim in ("country", "channel", "drift_phase", "served_by"):

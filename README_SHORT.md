@@ -72,6 +72,13 @@ Generate 200 scoring events (for monitoring reports):
 python src/monitoring/seed_decisions.py --count 200
 ```
 
+## 8) Single-event explainability
+```bash
+DEMO_MODE=1 uvicorn src.serving.app:app --host 0.0.0.0 --port 8083 --reload
+python -m src.demo.explain_event --transaction_id evt_1 --base_url http://localhost:8083
+```
+Artifacts: `monitoring/reports/latest/local_explanations/`
+
 ## Canary / Shadow router (optional, off by default)
 ```bash
 docker compose -f ops/docker-compose.yml up --build router serving-v1 serving-v2

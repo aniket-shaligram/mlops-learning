@@ -92,6 +92,9 @@
           <div class="text-sm">
             <a class="text-blue-600 hover:underline" href="/reports/index.html" target="_blank">Monitoring reports</a>
           </div>
+          <div class="text-sm">
+            <button id="intuitionBtn" class="text-blue-600 hover:underline">Model intuition</button>
+          </div>
           <div class="grid grid-cols-3 gap-3 text-sm">
             <div class="bg-slate-50 p-2 rounded">Rules: <span id="rulesScore">-</span></div>
             <div class="bg-slate-50 p-2 rounded">Champion: <span id="championScore">-</span></div>
@@ -179,5 +182,14 @@
     </div>
 
     <script src="/static/app.js?v=2"></script>
+    <div id="intuitionModal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+      <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-lg font-semibold">Model Intuition</h3>
+          <button id="intuitionClose" class="text-slate-500">Close</button>
+        </div>
+        <div id="intuitionContent" class="space-y-4 text-sm"></div>
+      </div>
+    </div>
   </body>
 </html>
