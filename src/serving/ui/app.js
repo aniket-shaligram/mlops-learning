@@ -1,3 +1,5 @@
+window.__APP_JS_LOADED = true;
+
 const fields = [
   "user_id",
   "merchant_id",
@@ -15,9 +17,83 @@ const randomBtn = document.getElementById("randomBtn");
 const scoreError = document.getElementById("scoreError");
 const driftPreset = document.getElementById("driftPreset");
 const intuitionBtn = document.getElementById("intuitionBtn");
-const intuitionModal = document.getElementById("intuitionModal");
-const intuitionClose = document.getElementById("intuitionClose");
-const intuitionContent = document.getElementById("intuitionContent");
+let intuitionModal = document.getElementById("intuitionModal");
+let intuitionClose = document.getElementById("intuitionClose");
+let intuitionContent = document.getElementById("intuitionContent");
+
+function escapeHtml(value) {
+  const text = value === null || value === undefined ? "" : String(value);
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function renderStaticSections(sections) {
+  return (sections || [])
+    .map((section) => {
+      const type = section?.type;
+      if (type === "paragraph") {
+        return `<p class="text-slate-700">${escapeHtml(section.text)}</p>`;
+      }
+      if (type === "callout") {
+        return `
+          <div class="bg-slate-50 border rounded p-3">
+            <div class="font-semibold">${escapeHtml(section.title || "")}</div>
+            <div class="text-slate-600">${escapeHtml(section.text || "")}</div>
+          </div>
+        `;
+      }
+      if (type === "bullets") {
+        const items = (section.items || [])
+          .map(
+            (item) => `
+              <li>
+                <span class="font-semibold">${escapeHtml(item.title || "")}</span>
+                <span class="text-slate-600"> ${escapeHtml(item.text || "")}</span>
+              </li>
+            `
+          )
+          .join("");
+        return `
+          <div>
+            <div class="font-semibold">${escapeHtml(section.title || "")}</div>
+            ${items ? `<ul class="list-disc ml-5 mt-2 space-y-1">${items}</ul>` : ""}
+          </div>
+        `;
+      }
+      if (type === "table") {
+        const columns = section.columns || [];
+        const rows = section.rows || [];
+        const header = columns
+          .map((col) => `<th class="py-1 pr-3 text-left">${escapeHtml(col)}</th>`)
+          .join("");
+        const body = rows
+          .map(
+            (row) =>
+              `<tr>${(row || [])
+                .map((cell) => `<td class="py-1 pr-3">${escapeHtml(cell)}</td>`)
+                .join("")}</tr>`
+          )
+          .join("");
+        return `
+          <div>
+            <div class="font-semibold">${escapeHtml(section.title || "")}</div>
+            <div class="overflow-auto mt-2">
+              <table class="w-full text-sm">
+                <thead class="text-slate-500"><tr>${header}</tr></thead>
+                <tbody>${body}</tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+      return "";
+    })
+    .join("");
+}
 
 function setDecisionBadge(decision) {
   const badge = document.getElementById("decisionBadge");
@@ -252,8 +328,12 @@ async function pollDecisions() {
 
 randomBtn?.addEventListener("click", fillRandom);
 scoreBtn?.addEventListener("click", score);
-if (intuitionBtn && intuitionModal && intuitionClose && intuitionContent) {
+if (intuitionBtn) {
   intuitionBtn.addEventListener("click", async () => {
+    refreshIntuitionNodes();
+    if (!intuitionModal || !intuitionClose || !intuitionContent) {
+      return;
+    }
     intuitionModal.classList.remove("hidden");
     try {
       const resp = await fetch("/reports/latest/model_intuition.json");
@@ -282,10 +362,64 @@ if (intuitionBtn && intuitionModal && intuitionClose && intuitionContent) {
       intuitionContent.textContent = "Intuition file not found. Run: python -m src.demo.model_intuition";
     }
   });
-  intuitionClose.addEventListener("click", () => {
-    intuitionModal.classList.add("hidden");
-  });
 }
+
+document.addEventListener("click", (event) => {
+  if (event.target?.id !== "intuitionClose") return;
+  refreshIntuitionNodes();
+  intuitionModal?.classList.add("hidden");
+});
+
+function refreshIntuitionNodes() {
+  intuitionModal = document.getElementById("intuitionModal");
+  intuitionClose = document.getElementById("intuitionClose");
+  intuitionContent = document.getElementById("intuitionContent");
+}
+
+window.openIntuition = async (modelId) => {
+  refreshIntuitionNodes();
+  if (!intuitionModal || !intuitionContent) {
+    return;
+  }
+  try {
+    const resp = await fetch("/reports/latest/explainability_popups.json");
+    if (!resp.ok) {
+      throw new Error(`Popup fetch failed (${resp.status})`);
+    }
+    const popups = await resp.json();
+    const spec = popups.explainability_popups?.[modelId];
+    if (!spec) {
+      return;
+    }
+    const title = intuitionModal.querySelector("h3");
+    if (title) title.textContent = spec.title || "Model";
+    intuitionContent.innerHTML = renderStaticSections(spec.sections || []);
+    intuitionModal.classList.remove("hidden");
+  } catch (err) {
+    intuitionContent.textContent = "Explainability popups not found.";
+    intuitionModal.classList.remove("hidden");
+  }
+};
+
+document.addEventListener("click", (event) => {
+  const btn = event.target.closest?.(".modelInfo");
+  if (!btn) return;
+  window.openIntuition?.(btn.dataset.model);
+});
+
+const infoButtons = [
+  document.getElementById("infoEnsemble"),
+  document.getElementById("infoRules"),
+  document.getElementById("infoGbdt"),
+  document.getElementById("infoAnomaly"),
+];
+infoButtons.forEach((btn) => {
+  if (!btn) return;
+  btn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    window.openIntuition?.(btn.dataset.model);
+  });
+});
 
 fillRandom();
 pollStats();

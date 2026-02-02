@@ -12,6 +12,7 @@
         <div>
           <h1 class="text-2xl font-semibold">Fraud PoC Demo</h1>
           <p class="text-sm text-slate-500">FastAPI gateway with Feast + ensemble scoring</p>
+          <p class="text-xs text-slate-400 mt-1">UI build v6</p>
         </div>
         <div class="text-sm space-x-4">
           <a class="text-blue-600 hover:underline" href="/docs">/docs</a>
@@ -87,7 +88,18 @@
           <h2 class="text-lg font-semibold">Latest Result</h2>
           <div class="flex items-center gap-3">
             <span id="decisionBadge" class="px-2 py-1 rounded text-sm bg-slate-200">n/a</span>
-            <span class="text-sm text-slate-600">Final score: <span id="finalScore">-</span></span>
+            <span class="text-sm text-slate-600">
+              Final score: <span id="finalScore">-</span>
+              <button
+                id="infoEnsemble"
+                type="button"
+                class="modelInfo text-blue-600 ml-1 relative z-10"
+                data-model="ensemble"
+                onclick="window.openIntuition && window.openIntuition('ensemble')"
+              >
+                ⓘ
+              </button>
+            </span>
           </div>
           <div class="text-sm">
             <a class="text-blue-600 hover:underline" href="/reports/index.html" target="_blank">Monitoring reports</a>
@@ -96,9 +108,42 @@
             <button id="intuitionBtn" class="text-blue-600 hover:underline">Model intuition</button>
           </div>
           <div class="grid grid-cols-3 gap-3 text-sm">
-            <div class="bg-slate-50 p-2 rounded">Rules: <span id="rulesScore">-</span></div>
-            <div class="bg-slate-50 p-2 rounded">Champion: <span id="championScore">-</span></div>
-            <div class="bg-slate-50 p-2 rounded">Anomaly: <span id="anomalyScore">-</span></div>
+            <div class="bg-slate-50 p-2 rounded">
+              Rules: <span id="rulesScore">-</span>
+              <button
+                id="infoRules"
+                type="button"
+                class="modelInfo text-blue-600 ml-1 relative z-10"
+                data-model="rules_engine"
+                onclick="window.openIntuition && window.openIntuition('rules_engine')"
+              >
+                ⓘ
+              </button>
+            </div>
+            <div class="bg-slate-50 p-2 rounded">
+              Champion: <span id="championScore">-</span>
+              <button
+                id="infoGbdt"
+                type="button"
+                class="modelInfo text-blue-600 ml-1 relative z-10"
+                data-model="gbdt"
+                onclick="window.openIntuition && window.openIntuition('gbdt')"
+              >
+                ⓘ
+              </button>
+            </div>
+            <div class="bg-slate-50 p-2 rounded">
+              Anomaly: <span id="anomalyScore">-</span>
+              <button
+                id="infoAnomaly"
+                type="button"
+                class="modelInfo text-blue-600 ml-1 relative z-10"
+                data-model="anomaly"
+                onclick="window.openIntuition && window.openIntuition('anomaly')"
+              >
+                ⓘ
+              </button>
+            </div>
           </div>
           <div class="text-sm">
             <div class="text-slate-600 mb-1">Model</div>
@@ -181,7 +226,6 @@
       </div>
     </div>
 
-    <script src="/static/app.js?v=2"></script>
     <div id="intuitionModal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
       <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 p-5">
         <div class="flex items-center justify-between mb-3">
@@ -191,5 +235,6 @@
         <div id="intuitionContent" class="space-y-4 text-sm"></div>
       </div>
     </div>
+    <script src="/static/app.js?v=11"></script>
   </body>
 </html>

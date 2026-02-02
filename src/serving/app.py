@@ -12,11 +12,12 @@ from typing import Any, Dict, Optional
 
 import psycopg2
 from psycopg2.extras import Json
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from pydantic import BaseModel
 from prometheus_client import Counter, Histogram, generate_latest
 from starlette.responses import Response
 from starlette.responses import FileResponse
+from starlette.responses import RedirectResponse
 from starlette.staticfiles import StaticFiles
 
 from src.serving.feast_client import OnlineFeatureClient
@@ -68,6 +69,15 @@ models = load_models()
 feast_client = OnlineFeatureClient()
 app.mount("/static", StaticFiles(directory=UI_ROOT), name="static")
 app.mount("/reports", StaticFiles(directory="monitoring/reports"), name="reports")
+
+
+@app.middleware("http")
+async def no_cache_for_ui(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path == "/ui" or path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 def _log_decision(event: Dict[str, Any], response: Dict[str, Any], feature_count: int) -> None:
@@ -229,6 +239,11 @@ def health():
 @app.get("/metrics")
 def metrics():
     return Response(generate_latest(), media_type="text/plain")
+
+
+@app.get("/")
+def root():
+    return RedirectResponse(url="/ui")
 
 
 @app.get("/ui")
