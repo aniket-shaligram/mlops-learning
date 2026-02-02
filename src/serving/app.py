@@ -19,10 +19,16 @@ from starlette.responses import Response
 from starlette.responses import FileResponse
 from starlette.responses import RedirectResponse
 from starlette.staticfiles import StaticFiles
+from typing import List
+import pandas as pd
+import numpy as np
+import shap
 
 from src.serving.feast_client import OnlineFeatureClient
 from src.serving.model_loader import load_models
 from src.serving.scorer import score_event
+from src.models.rules_model import RulesModel
+from src.utils import encode_synth_features, SYNTH_CATEGORICALS
 
 LOG_FULL_PAYLOAD = os.getenv("LOG_FULL_PAYLOAD", "false").lower() == "true"
 DEMO_MODE = os.getenv("DEMO_MODE", "0") == "1"
@@ -143,6 +149,106 @@ def _insert_decision_log(event: Dict[str, Any], response: Dict[str, Any]) -> Non
                     "latency_ms": Json(payload["latency_ms"]),
                 },
             )
+
+
+def _to_float(value: Any) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return 0.0
+
+
+def _get_feature_value(features: Dict[str, Any], key: str) -> float:
+    value = features.get(key, 0)
+    if value is None:
+        return 0.0
+    return _to_float(value)
+
+
+def _rules_triggered(features: Dict[str, Any], thresholds: Dict[str, float]) -> List[str]:
+    amount = _get_feature_value(features, "amount")
+    geo_mismatch = _get_feature_value(features, "geo_mismatch")
+    is_new_device = _get_feature_value(features, "is_new_device")
+    is_new_ip = _get_feature_value(features, "is_new_ip")
+    suspicious_context = (geo_mismatch + is_new_device + is_new_ip) >= 1
+
+    high_amount = amount >= thresholds.get("high_amount", 1500.0)
+    very_high_amount = amount >= thresholds.get("very_high_amount", 5000.0)
+    velocity_count = _get_feature_value(features, "user_txn_count_5m")
+    velocity_amount = _get_feature_value(features, "user_amount_sum_1h")
+    merchant_risk = _get_feature_value(features, "merchant_chargeback_rate_30d")
+
+    triggered: List[str] = []
+    if very_high_amount and suspicious_context:
+        triggered.append("Very high amount + suspicious context")
+    if high_amount and suspicious_context:
+        triggered.append("High amount + suspicious context")
+    if velocity_count >= thresholds.get("velocity_count_5m", 6.0):
+        triggered.append("High transaction velocity (5m)")
+    if velocity_amount >= thresholds.get("velocity_amount_1h", 2500.0):
+        triggered.append("High spending velocity (1h)")
+    if merchant_risk >= thresholds.get("merchant_risk", 0.8):
+        triggered.append("High-risk merchant")
+    return triggered
+
+
+def _anomaly_reasons(anomaly_score: float, features: Dict[str, Any], thresholds: Dict[str, float]) -> List[str]:
+    reasons: List[str] = []
+    if anomaly_score > 0.8:
+        reasons.append("Transaction looks highly unusual compared to baseline patterns")
+    if _get_feature_value(features, "geo_mismatch") >= 1:
+        reasons.append("Geo mismatch")
+    if _get_feature_value(features, "is_new_device") >= 1:
+        reasons.append("New device")
+    if _get_feature_value(features, "is_new_ip") >= 1:
+        reasons.append("New IP")
+    velocity_count = _get_feature_value(features, "user_txn_count_5m")
+    velocity_amount = _get_feature_value(features, "user_amount_sum_1h")
+    if velocity_count >= thresholds.get("velocity_count_5m", 6.0) or velocity_amount >= thresholds.get(
+        "velocity_amount_1h", 2500.0
+    ):
+        reasons.append("Unusual velocity")
+    return reasons[:4]
+
+
+def _build_feature_df(features: Dict[str, Any], feature_list: list[str]) -> pd.DataFrame:
+    df = pd.DataFrame([{k: v for k, v in features.items() if v is not None}])
+    if any(col in df.columns for col in SYNTH_CATEGORICALS):
+        df = encode_synth_features(df, [c for c in SYNTH_CATEGORICALS if c in df.columns])
+    for col in feature_list:
+        if col not in df.columns:
+            df[col] = 0
+    df = df[feature_list]
+    return df
+
+
+def _compute_shap_top(
+    features: Dict[str, Any], top_k: int, feature_list: list[str]
+) -> List[Dict[str, Any]]:
+    try:
+        champion = models.champion_model
+        if champion is None:
+            return []
+        df = _build_feature_df(features, feature_list)
+        explainer = shap.TreeExplainer(champion)
+        shap_values = explainer.shap_values(df)
+        if isinstance(shap_values, list):
+            shap_values = shap_values[-1]
+        values = shap_values[0] if isinstance(shap_values, np.ndarray) else np.array(shap_values)[0]
+        pairs = list(zip(feature_list, values))
+        pairs.sort(key=lambda x: abs(x[1]), reverse=True)
+        output = []
+        for name, val in pairs[: top_k or 5]:
+            output.append(
+                {
+                    "feature": name,
+                    "shap": float(val),
+                    "direction": "increased_risk" if val > 0 else "decreased_risk",
+                }
+            )
+        return output
+    except Exception:
+        return []
 
 
 @app.post("/score")
@@ -294,6 +400,59 @@ def stats():
 def recent_decisions(limit: int = 50):
     limit = max(1, min(limit, 200))
     return list(decisions)[-limit:]
+
+
+@app.get("/api/txns/{event_id}/explain")
+def explain_transaction(event_id: str, top_k: int = 5, include_features: bool = False):
+    try:
+        with psycopg2.connect(PG_DSN) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    select event_id, final_score, decision, scores, fallbacks, model_versions, features
+                    from decision_log
+                    where event_id = %s
+                    order by created_at desc
+                    limit 1
+                    """,
+                    (event_id,),
+                )
+                row = cursor.fetchone()
+        if not row:
+            return {"status": "error", "message": "event_id not found", "event_id": event_id}
+
+        feature_snapshot = row[6] or {}
+        scores = row[3] or {}
+        fallbacks = row[4] or {}
+        model_versions = row[5] or {}
+
+        rules_model = models.rules_model if getattr(models, "rules_model", None) else RulesModel()
+        thresholds = rules_model.thresholds if hasattr(rules_model, "thresholds") else RulesModel().thresholds
+        rules_triggered = _rules_triggered(feature_snapshot, thresholds)
+
+        feature_list = models.metadata.get("feature_list") or []
+        gbdt_top = _compute_shap_top(feature_snapshot, top_k, feature_list) if feature_list else []
+
+        anomaly_score = _to_float(scores.get("anomaly", 0.0))
+        anomaly_reasons = _anomaly_reasons(anomaly_score, feature_snapshot, thresholds)
+
+        payload: Dict[str, Any] = {
+            "status": "ok",
+            "event_id": row[0],
+            "decision": row[2],
+            "final_score": _to_float(row[1]),
+            "scores": scores,
+            "fallbacks": fallbacks,
+            "model_versions": model_versions,
+            "rules": {"thresholds": thresholds, "triggered": rules_triggered},
+            "gbdt": {"top_contributors": gbdt_top},
+            "anomaly": {"score": anomaly_score, "reasons": anomaly_reasons},
+        }
+        if include_features:
+            payload["feature_snapshot"] = feature_snapshot
+        return payload
+    except Exception as exc:
+        return {"status": "error", "message": str(exc), "event_id": event_id}
 
 
 @app.get("/debug/last-decision")

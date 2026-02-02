@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, List
 
+from pathlib import Path
 from feast import FeatureStore
 
 ENTITY_KEYS = ["user_id", "merchant_id", "device_id", "ip_id"]
@@ -27,11 +28,16 @@ def _require_entities(payload: Dict[str, object], keys: List[str]) -> Dict[str, 
     return {key: payload[key] for key in keys}
 
 
+def _default_repo_path() -> str:
+    repo_root = Path(__file__).resolve().parents[1]
+    return str(repo_root / "feast_repo")
+
+
 def get_online_feature_vector(
-    payload: Dict[str, object], repo_path: str = "feast_repo"
+    payload: Dict[str, object], repo_path: str | None = None
 ) -> Dict[str, object]:
     entity_row = _require_entities(payload, ENTITY_KEYS)
-    store = FeatureStore(repo_path=repo_path)
+    store = FeatureStore(repo_path=repo_path or _default_repo_path())
     response = store.get_online_features(
         features=FEAST_FEATURE_REFS,
         entity_rows=[entity_row],

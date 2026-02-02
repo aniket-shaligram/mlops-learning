@@ -20,6 +20,7 @@ const intuitionBtn = document.getElementById("intuitionBtn");
 let intuitionModal = document.getElementById("intuitionModal");
 let intuitionClose = document.getElementById("intuitionClose");
 let intuitionContent = document.getElementById("intuitionContent");
+let SELECTED_EVENT_ID = null;
 
 function escapeHtml(value) {
   const text = value === null || value === undefined ? "" : String(value);
@@ -307,7 +308,11 @@ async function pollDecisions() {
     if (table) {
       table.innerHTML = "";
     }
-    data.slice().reverse().forEach((row) => {
+    const rows = data.slice().reverse();
+    if (!SELECTED_EVENT_ID && rows.length > 0) {
+      SELECTED_EVENT_ID = rows[0].event_id || null;
+    }
+    rows.forEach((row) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td class="py-1">${row.ts?.slice(11, 19) || "-"}</td>
@@ -317,6 +322,14 @@ async function pollDecisions() {
         <td class="py-1">${row.decision || "-"}</td>
         <td class="py-1">${row.final_score?.toFixed(3) ?? "-"}</td>
       `;
+      tr.dataset.eventId = row.event_id || "";
+      tr.classList.toggle("bg-slate-100", row.event_id && row.event_id === SELECTED_EVENT_ID);
+      tr.addEventListener("click", () => {
+        SELECTED_EVENT_ID = row.event_id || null;
+        const allRows = table?.querySelectorAll("tr") || [];
+        allRows.forEach((r) => r.classList.remove("bg-slate-100"));
+        tr.classList.add("bg-slate-100");
+      });
       if (table) {
         table.appendChild(tr);
       }
@@ -376,6 +389,89 @@ function refreshIntuitionNodes() {
   intuitionContent = document.getElementById("intuitionContent");
 }
 
+function renderLiveExplainability(modelId) {
+  if (!SELECTED_EVENT_ID) {
+    return `
+      <div class="mt-4 border-t pt-4 text-sm text-slate-600">
+        Select a transaction from Recent Decisions to see live explainability.
+      </div>
+    `;
+  }
+  return `
+    <div class="mt-4 border-t pt-4 text-sm text-slate-600" id="liveExplainContainer">
+      Loading live explainability…
+    </div>
+  `;
+}
+
+async function loadLiveExplainability(modelId) {
+  if (!SELECTED_EVENT_ID) return;
+  const container = document.getElementById("liveExplainContainer");
+  if (!container) return;
+  try {
+    const resp = await fetch(`/api/txns/${encodeURIComponent(SELECTED_EVENT_ID)}/explain?top_k=5`);
+    if (!resp.ok) throw new Error("Live explain unavailable");
+    const data = await resp.json();
+    if (data.status !== "ok") throw new Error("Live explain unavailable");
+
+    const rulesList = (data.rules?.triggered || [])
+      .map((item) => `<li>${escapeHtml(item)}</li>`)
+      .join("");
+    const gbdtList = (data.gbdt?.top_contributors || [])
+      .map(
+        (item) =>
+          `<li>${escapeHtml(item.feature)}: ${Number(item.shap).toFixed(4)} (${escapeHtml(
+            item.direction || ""
+          )})</li>`
+      )
+      .join("");
+    const anomalyList = (data.anomaly?.reasons || [])
+      .map((item) => `<li>${escapeHtml(item)}</li>`)
+      .join("");
+
+    const showRules = modelId === "rules_engine" || modelId === "ensemble";
+    const showGbdt = modelId === "gbdt" || modelId === "ensemble";
+    const showAnomaly = modelId === "anomaly" || modelId === "ensemble";
+
+    container.innerHTML = `
+      <div class="font-semibold text-slate-800">For this transaction</div>
+      <div class="text-sm text-slate-700 mt-1">Decision: ${escapeHtml(
+        data.decision || "-"
+      )} | Final score: ${Number(data.final_score ?? 0).toFixed(4)}</div>
+      ${
+        showRules
+          ? `
+        <div class="mt-2">
+          <div class="font-medium text-sm">Rules tripwires</div>
+          ${rulesList ? `<ul class="list-disc ml-5 text-sm">${rulesList}</ul>` : `<div class="text-sm">None</div>`}
+        </div>`
+          : ""
+      }
+      ${
+        showGbdt
+          ? `
+        <div class="mt-2">
+          <div class="font-medium text-sm">GBDT top drivers (SHAP)</div>
+          ${gbdtList ? `<ul class="list-disc ml-5 text-sm">${gbdtList}</ul>` : `<div class="text-sm">Unavailable</div>`}
+        </div>`
+          : ""
+      }
+      ${
+        showAnomaly
+          ? `
+        <div class="mt-2">
+          <div class="font-medium text-sm">Anomaly signals</div>
+          <div class="text-sm">Score: ${Number(data.anomaly?.score ?? 0).toFixed(4)}</div>
+          ${anomalyList ? `<ul class="list-disc ml-5 text-sm">${anomalyList}</ul>` : `<div class="text-sm">None</div>`}
+        </div>`
+          : ""
+      }
+    `;
+  } catch (err) {
+    container.textContent = "Live explain unavailable.";
+  }
+}
+
 window.openIntuition = async (modelId) => {
   refreshIntuitionNodes();
   if (!intuitionModal || !intuitionContent) {
@@ -393,8 +489,10 @@ window.openIntuition = async (modelId) => {
     }
     const title = intuitionModal.querySelector("h3");
     if (title) title.textContent = spec.title || "Model";
-    intuitionContent.innerHTML = renderStaticSections(spec.sections || []);
+    intuitionContent.innerHTML =
+      renderStaticSections(spec.sections || []) + renderLiveExplainability(modelId);
     intuitionModal.classList.remove("hidden");
+    await loadLiveExplainability(modelId);
   } catch (err) {
     intuitionContent.textContent = "Explainability popups not found.";
     intuitionModal.classList.remove("hidden");
