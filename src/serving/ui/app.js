@@ -1,4 +1,5 @@
 window.__APP_JS_LOADED = true;
+const POPUPS_VERSION = window.__EXPLAIN_POPUPS_VERSION || "1";
 
 const fields = [
   "user_id",
@@ -478,7 +479,7 @@ window.openIntuition = async (modelId) => {
     return;
   }
   try {
-    const resp = await fetch("/reports/latest/explainability_popups.json");
+    const resp = await fetch(`/reports/latest/explainability_popups.json?v=${encodeURIComponent(POPUPS_VERSION)}`);
     if (!resp.ok) {
       throw new Error(`Popup fetch failed (${resp.status})`);
     }
